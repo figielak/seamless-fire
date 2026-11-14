@@ -20,6 +20,7 @@ COUNTRIES = {
     "GR": "Greece",
     "UA": "Ukraine",
     "AU": "Australia",
+    "CA": "Canada",
 }
 
 CELL_DEG = 0.1                # aggregation grid
@@ -29,6 +30,18 @@ N20_FACTOR_YEARS = (2018, 2025)
 SNPP_LAST_DATE = "2026-11-02"  # after this date VIIRS series = NOAA-20 x factor
 
 SENSORS = ("MODIS", "SNPP", "N20")
+
+# Sensor outages: excluded from calibration and flagged in the calendar.
+CALIB_EXCLUDE = ["2020-08", "2020-09", "2022-07", "2022-08"]  # Aqua FMU failure, S-NPP outage
+LOW_QUALITY = [f"2000-{m:02d}" for m in range(1, 11)] + CALIB_EXCLUDE  # + Terra early 2000
+
+# Calendar month (1..12) -> season index: DJF=0, MAM=1, JJA=2, SON=3
+SEASON_OF_MONTH = [None, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0]
+
+MIN_FIRE_MONTHS = 60    # fewer calibration months with M>0 and V>0 -> pooled model
+INTERVAL_Z = 1.2816     # 80% interval
+DE_TIE = 0.01           # E must beat D by more than this LOYO log-RMSE to be chosen
+TERRA_SEASON_MIN = 100  # min Terra cell-days per season to use a seasonal Terra-only ratio
 
 # `satellite` column value -> normalized satellite name
 SATELLITE_NAMES = {

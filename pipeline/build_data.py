@@ -3,7 +3,9 @@
 Stage 1: load, filter `type == 0`, cell-days -> countries.json, {CC}/cells.json,
 plus a cell-day cache in pipeline/cache/ for later stages.
 
-Usage: python pipeline/build_data.py [CC ...]
+Stage 2 (model.py): validation of methods A-E -> {CC}/model.json.
+
+Usage: python pipeline/build_data.py [--model-only] [CC ...]
 """
 
 import json
@@ -15,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from model import build_models
 from config import (
     CACHE_DIR, COUNTRIES, ENCODING, FILENAME_MAP, FIRST_MONTH, LAST_YEAR_STAGE1,
     OUT_DIR, RAW_DIR, SATELLITE_NAMES, SATELLITE_SENSOR,
@@ -59,6 +62,12 @@ def read_file(path: Path) -> pd.DataFrame:
     )
     if "type" not in df:
         raise ValueError(f"{path.name}: no `type` column (industrial mask is stage 4)")
+    # A truncated download leaves an incomplete last row; drop it loudly, never silently.
+    broken = df[["latitude", "longitude", "acq_date", "type"]].isna().any(axis=1)
+    if broken.any():
+        print(f"  WARNING {path.name}: dropped {broken.sum()} incomplete row(s), "
+              f"last date {df.loc[~broken, 'acq_date'].max()} (truncated file?)")
+        df = df[~broken].copy()
 
     # Normalized satellite from the `satellite` column; file name only as fallback.
     sat = df["satellite"].map(SATELLITE_NAMES) if "satellite" in df else pd.Series(pd.NA, index=df.index)
@@ -157,11 +166,20 @@ def write_cells_json(code: str, celldays: pd.DataFrame) -> None:
           f"{path.stat().st_size / 1e6:.2f} MB")
 
 
-def main(codes: list[str]) -> None:
+def main(args: list[str]) -> None:
+    model_only = "--model-only" in args
+    codes = [a for a in args if not a.startswith("--")] or list(COUNTRIES)
     unknown = [c for c in codes if c not in COUNTRIES]
     if unknown:
         sys.exit(f"Unknown country codes: {unknown}")
 
+    if not model_only:
+        build_cells(codes)
+    print("models:")
+    build_models(codes)
+
+
+def build_cells(codes: list[str]) -> None:
     # countries.json keeps entries built earlier so countries can be rebuilt one at a time.
     countries_path = OUT_DIR / "countries.json"
     existing = {}
@@ -177,4 +195,4 @@ def main(codes: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or list(COUNTRIES))
+    main(sys.argv[1:])

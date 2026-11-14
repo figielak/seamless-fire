@@ -11,6 +11,8 @@ Full context:
   sensor gaps: Terra Sep 2000, Aqua 16 Aug–2 Sep 2020, no sub-8-day series, not burned area)
 - `docs/viirs_guide.md`: VIIRS notes (from the burned area guide, not the 375 m hotspot guide;
   S-NPP outage 27 Jul–10 Aug 2022)
+- `docs/validation.md`: measured validation evidence (method comparison, backtest, agreement, tests), English;
+  update it when the pipeline results change
 - `.planning/codex_plan.md`: independent plan by Codex, **second opinion only, not followed**
   (header lists differences and ideas worth considering)
 
@@ -108,7 +110,7 @@ Detect the sensor from the `satellite` column, fall back to the file name.
   ```
   The 2026 files are merged from FIRMS Archive Download (`fire_archive_*` + `fire_nrt_*`,
   columns renamed to `bright_ti4`/`bright_ti5`). Originals: `data/_downloads_2026/{Country}/` (not read by the pipeline).
-  `data/Canada` exists but is not used (VIIRS S-NPP only 2012–2017).
+  `data/Canada` completed on 2026-11-14 (S-NPP 2018–2025 downloaded, truncated files kept as `*.csv.truncated`).
   `data/AttributesReadme.txt`: FIRMS column descriptions (one copy for all countries).
 - Columns: MODIS `latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_t31,frp,daynight,type`;
   VIIRS: same but `bright_ti4`/`bright_ti5`.
@@ -119,7 +121,7 @@ Detect the sensor from the `satellite` column, fall back to the file name.
 - Largest used file: ~164 MB (AU VIIRS S-NPP 2012); AU total ~2.7 GB, other countries ~290 MB together.
   Read with `usecols` and aggregate per file; never concat all raw AU rows in memory.
 
-Countries: PL, PT, ES (required), GR, UA, AU (all downloaded). Country list is one variable.
+Countries: PL, PT, ES (required), GR, UA, AU, CA (all downloaded and built). Country list is one variable.
 
 ## Sanity checks (results of earlier exploration, PL and PT, 2012–2025)
 
