@@ -190,6 +190,9 @@ cumulative cell-days since 1 Jan vs 2012–2025 (P10–P90, median), exact at da
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 - GitHub: `figielak/seamless-fire` (remote `origin`, SSH), site https://figielak.github.io/seamless-fire/. `site`/`base` come from env `SITE`/`BASE`, set by `.github/workflows/deploy.yml` from `configure-pages`
+- Daily data: `.github/workflows/update-live.yml` (cron 05:30 UTC + manual run) runs `pipeline/live_update.py`, commits
+  `live/` and `public/data/` as github-actions[bot] only when changed, then calls `deploy.yml` (`workflow_call`, input `ref`),
+  because a push with GITHUB_TOKEN does not trigger the push workflow. Pull before pushing your own commits.
 - Fedora Linux, Python 3.14 (pandas 3.0, numpy 2.5), Node 24, Astro 7, plotly.js-dist-min 4.3
 
 ## Work order

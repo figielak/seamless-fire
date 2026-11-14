@@ -37,7 +37,9 @@ Daily NRT updates ("present" = today), stages A–D agreed with the user 2026-11
   → `public/data/{CC}/daily/` + `live/nrt/`, `live/coverage.json` (seed NOAA-20 1–12 Nov 2026).
 - B done (uncommitted): `pipeline/live_update.py`, idempotent, real download ~1.5 min, tests in `pipeline/tests/test_live.py`.
 - C done (uncommitted): live month in calendar/areas/map/export, "Now" month to date, tab "This season". Site tests 81.
-- D next: GitHub Actions daily cron (`python pipeline/live_update.py`, commit if changed, deploy).
+- D done: `.github/workflows/update-live.yml` (cron 05:30 UTC), deploy.yml reusable. Check the first scheduled run.
+- Known limit: `live/nrt/{CC}.csv` and `live.json` grow every day (AU ~8k rows/day in season). Every few months rebuild
+  the base locally with newer FIRMS files (move `LAST_COMPLETE_MONTH`, rerun build_data + live_base) to fold live months in.
 
 ## Blockers / open questions
 
