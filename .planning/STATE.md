@@ -7,7 +7,7 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **6 done**, next: **7 (README)**
+- Stage: **7 done** (README written and live). All planned stages done; remaining: final checks before judging (Sun 15.11 13:00)
 - Main page `src/pages/index.astro` is map-first: full-screen Leaflet map, left control panel (country, area,
   period, raw/harmonized toggle in "Values"), Now card, bottom dock (Calendar / Per year / Anomalies / About).
   Map layer = per-cell share of the harmonized total (`src/lib/cellmap.ts`; preset cells sum to `harmonizeArea`).
@@ -24,8 +24,8 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. Stage 7: README (English): what it does, method summary, data sources (NASA FIRMS, EFFIS for the check,
-   EOX Sentinel-2 cloudless base map attribution), Apache 2.0, LLM-tools disclosure, how to rebuild.
+1. Final pass before judging: live check of all countries and presets, known events (PL Apr 2020, PT Sep 2024, PT Aug 2025),
+   Space Apps submission form (project link, README, demo).
 
 ## Blockers / open questions
 
