@@ -117,11 +117,11 @@ Detect the sensor from the `satellite` column, fall back to the file name.
   `acq_time` is HHMM as string (e.g. `0039`), keep leading zeros. Encoding: ASCII/UTF-8.
 - `satellite` values: MODIS `Terra`/`Aqua`; S-NPP `N` (yearly), `SNPP` (2026); NOAA-20 `N20`
 - 2026 files: rows 2026-01-03 → 2026-07-31 (archive) have `type`; rows from 2026-08-01 (NRT,
-  `version` = `2.0NRT`) have **empty** `type` → industrial mask for those rows only. NRT rows = preliminary. Last dates: S-NPP NRT 2026-11-02 (PL: 2026-10-31), NOAA-20 NRT 2026-11-12.
+  `version` = `2.0NRT`) have **empty** `type` → industrial mask for those rows only. NRT rows = preliminary. Last dates: S-NPP NRT 2026-11-02 (PL: 2026-10-31, CL: 2026-11-01), NOAA-20 NRT 2026-11-12.
 - Largest used file: ~164 MB (AU VIIRS S-NPP 2012); AU total ~2.7 GB, other countries ~290 MB together.
   Read with `usecols` and aggregate per file; never concat all raw AU rows in memory.
 
-Countries: PL, PT, ES (required), GR, UA, AU, CA (all downloaded and built). Country list is one variable.
+Countries: PL, PT, ES (required), GR, UA, AU, CA, CL (all downloaded and built). Country list is one variable.
 
 ## Sanity checks (results of earlier exploration, PL and PT, 2012–2025)
 

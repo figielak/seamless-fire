@@ -14,7 +14,7 @@ python -m unittest discover -s pipeline/tests  # unit + consistency tests
 ```
 
 Run date: 2026-11-14. Countries: Poland (PL), Portugal (PT), Spain (ES), Greece (GR),
-Ukraine (UA), Australia (AU), Canada (CA).
+Ukraine (UA), Australia (AU), Canada (CA), Chile (CL).
 
 ## 1. Unit of comparison: cell-days
 
@@ -30,23 +30,25 @@ VIIRS points but only a few hundred cell-days (Portugal, September 2024: 10,450 
 Only `type == 0` (presumed vegetation fire) is kept. Share of `type == 2` (static land source,
 mostly industry) among all detections:
 
-| | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| MODIS | 26.7% | 0.2% | 3.8% | 0.9% | 4.5% | 0.5% | 0.1% |
-| VIIRS | **71.9%** | 4.5% | 23.1% | 14.2% | 14.6% | 1.1% | 1.5% |
+| | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| MODIS | 26.7% | 0.2% | 3.8% | 0.9% | 4.5% | 0.5% | 0.1% | 18.8% |
+| VIIRS | **71.9%** | 4.5% | 23.1% | 14.2% | 14.6% | 1.1% | 1.5% | 16.7% |
 
 Without the filter almost three quarters of Polish VIIRS "fires" would be industrial sites
 (steelworks, refineries, gas flares), and VIIRS would inflate them much more than MODIS.
+Chile is the only country where the industrial share is similar for both sensors (copper
+smelters and other large static sources are bright enough for MODIS too).
 
 ## 3. Do the two sensors see the same fire activity?
 
-| | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| Monthly correlation MODIS vs S-NPP | 0.922 | 0.951 | 0.932 | 0.942 | 0.982 | 0.967 | 0.989 |
-| VIIRS / MODIS cell-day ratio | 3.50 | 1.87 | 2.38 | 2.86 | 2.40 | 1.90 | 1.73 |
-| MODIS cell-days also seen by VIIRS (exact) | 25.7% | 54.4% | 39.9% | 47.3% | 60.5% | 82.1% | 78.5% |
-| … with 3×3 neighbour tolerance | 34.2% | 70.1% | 50.5% | 64.5% | 80.6% | 91.5% | 87.3% |
-| VIIRS cell-days also seen by MODIS (exact) | 7.3% | 29.1% | 16.7% | 16.5% | 25.2% | 43.0% | 45.2% |
+| | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| Monthly correlation MODIS vs S-NPP | 0.922 | 0.951 | 0.932 | 0.942 | 0.982 | 0.967 | 0.989 | 0.906 |
+| VIIRS / MODIS cell-day ratio | 3.50 | 1.87 | 2.38 | 2.86 | 2.40 | 1.90 | 1.73 | 2.38 |
+| MODIS cell-days also seen by VIIRS (exact) | 25.7% | 54.4% | 39.9% | 47.3% | 60.5% | 82.1% | 78.5% | 58.1% |
+| … with 3×3 neighbour tolerance | 34.2% | 70.1% | 50.5% | 64.5% | 80.6% | 91.5% | 87.3% | 71.1% |
+| VIIRS cell-days also seen by MODIS (exact) | 7.3% | 29.1% | 16.7% | 16.5% | 25.2% | 43.0% | 45.2% | 24.3% |
 
 **Correlation** (1.0 = perfect) shows how closely the two monthly series move together: same
 seasons, same bad years. Above 0.9 everywhere, so converting one sensor to the other is justified.
@@ -81,13 +83,13 @@ Metrics:
 - **Log-RMSE**: typical error of a single month on a log scale. 0.10 ≈ ±10%, 0.43 ≈ a factor of 1.5,
   1.1 ≈ a factor of 3.
 
-| Annual error / log-RMSE | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| A | 46% / 1.39 | 14% / 0.51 | 20% / 0.39 | 32% / 0.70 | 20% / 0.75 | 6% / 0.14 | 12% / 0.52 |
-| B | 24% / 1.17 | 15% / 0.52 | 10% / 0.28 | 7% / 0.45 | 7% / 0.63 | 6% / 0.15 | 12% / 0.59 |
-| C | 28% / 1.11 | 9% / 0.45 | 11% / 0.27 | 5% / 0.33 | 6% / 0.44 | 5% / 0.13 | 7% / 0.24 |
-| D | 15% / 0.48 | 10% / 0.36 | 6% / 0.22 | 11% / 0.28 | 7% / 0.25 | 3% / 0.10 | 8% / 0.17 |
-| E | 15% / 0.43 | 10% / 0.35 | 7% / 0.21 | 9% / 0.26 | 7% / 0.24 | 3% / 0.09 | 8% / 0.17 |
+| Annual error / log-RMSE | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| A | 46% / 1.39 | 14% / 0.51 | 20% / 0.39 | 32% / 0.69 | 19% / 0.74 | 6% / 0.14 | 13% / 0.52 | 20% / 0.47 |
+| B | 24% / 1.17 | 15% / 0.52 | 10% / 0.28 | 7% / 0.45 | 7% / 0.63 | 6% / 0.15 | 12% / 0.59 | 14% / 0.38 |
+| C | 28% / 1.11 | 9% / 0.45 | 11% / 0.27 | 5% / 0.33 | 6% / 0.44 | 5% / 0.13 | 7% / 0.24 | 14% / 0.34 |
+| D | 15% / 0.48 | 10% / 0.36 | 6% / 0.22 | 11% / 0.28 | 7% / 0.25 | 3% / 0.10 | 8% / 0.17 | 10% / 0.27 |
+| E | 15% / 0.43 | 10% / 0.35 | 7% / 0.21 | 9% / 0.26 | 7% / 0.24 | 3% / 0.09 | 8% / 0.17 | 8% / 0.26 |
 
 The log-log model (D/E) has the lowest monthly error in every country, often by a factor of 2
 (PL: 0.43 vs 1.11 for the best ratio method). Simple ratios fail because the relation is not
@@ -100,13 +102,13 @@ Canada dominate the sums).
 Rule (decided before looking at results): E only if its LOYO log-RMSE beats D by more than 0.01,
 otherwise the simpler D.
 
-| | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| E − D log-RMSE | −0.048 | −0.007 | −0.007 | −0.021 | −0.012 | −0.007 | −0.001 |
-| Model | **E** | D | D | **E** | **E** | D | D |
-| b | 0.564 | 0.802 | 0.769 | 0.787 | 0.815 | 0.858 | 0.734 |
-| sigma (monthly, log) | 0.430 | 0.362 | 0.217 | 0.260 | 0.239 | 0.100 | 0.175 |
-| sigma (annual, log) | 0.182 | 0.130 | 0.086 | 0.099 | 0.085 | 0.043 | 0.106 |
+| | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| E − D log-RMSE | −0.048 | −0.007 | −0.007 | −0.021 | −0.012 | −0.007 | −0.001 | −0.009 |
+| Model | **E** | D | D | **E** | **E** | D | D | D |
+| b | 0.564 | 0.802 | 0.769 | 0.787 | 0.815 | 0.858 | 0.734 | 0.718 |
+| sigma (monthly, log) | 0.430 | 0.362 | 0.217 | 0.260 | 0.239 | 0.100 | 0.175 | 0.271 |
+| sigma (annual, log) | 0.182 | 0.130 | 0.086 | 0.099 | 0.085 | 0.043 | 0.106 | 0.114 |
 
 The seasonal term helps where the season changes how the sensors relate: in Poland, spring
 grass burning versus summer stubble burning. Both variants use the same formula on the site
@@ -120,12 +122,13 @@ grass burning versus summer stubble burning. Both variants use the same formula 
 A harder test: calibrate only on 2019–2025, predict 2012–2018. The signed error shows whether the
 model drifts.
 
-| Signed annual error, chosen model | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| Mean | +6% | **−27%** | −4% | −11% | −9% | 0% | −3% |
-| Mean absolute | 15% | 27% | 5% | 11% | 10% | 2% | 7% |
+| Signed annual error, chosen model | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| Mean | +6% | **−27%** | −4% | −11% | −9% | 0% | −3% | **+17%** |
+| Mean absolute | 15% | 27% | 5% | 11% | 10% | 2% | 7% | 17% |
 
 Portugal by year (D): 2012 −32%, 2013 −33%, 2014 −22%, 2015 −26%, 2016 −25%, 2017 −27%, 2018 −21%.
+Chile by year (D): 2012 +17%, 2013 +9%, 2014 +16%, 2015 +14%, 2016 +24%, 2017 +38%, 2018 −1%.
 
 In Portugal, and to a lesser degree in Greece and Ukraine, a model fitted on recent years
 underestimates older years in **every** year, so the MODIS–VIIRS relation has changed over
@@ -133,27 +136,32 @@ time (possible causes: MODIS orbit drift and ageing, changes in fire regime). Th
 model is fitted on all of 2012–2025, which averages this out, but estimates for 2000–2011 in
 these countries carry extra uncertainty. This is listed as a limitation.
 
+Chile drifts the other way: a model fitted on 2019–2025 **overestimates** 2012–2017
+(+17% on average, +38% in the record fire year 2017). The drift therefore has no single
+direction across countries, which points to regional changes in fire regime rather than one
+global sensor trend.
+
 ## 7. Retransformation (smearing) check
 
 A log model predicts the median, so summing back-transformed months can underestimate totals.
 We tested the Duan smearing correction as a diagnostic (not adopted):
 
-| Signed error, chosen model → with smearing | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| LOYO bias | −6.8% → +0.8% | −0.8% → +5.7% | −2.0% → +0.2% | −2.6% → +0.5% | −1.7% → +0.8% | −0.8% → −0.4% | −2.9% → −1.5% |
-| Backtest bias | +6.1% → +12.9% | −26.5% → −21.4% | −3.8% → −1.4% | −11.2% → −8.3% | −8.7% → −6.0% | −0.4% → +0.2% | −3.3% → −1.5% |
+| Signed error, chosen model → with smearing | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| LOYO bias | −6.8% → +0.8% | −0.8% → +5.7% | −2.0% → +0.2% | −2.6% → +0.5% | −1.7% → +0.8% | −0.8% → −0.4% | −2.9% → −1.5% | −3.1% → +0.3% |
+| Backtest bias | +6.1% → +12.9% | −26.5% → −21.4% | −3.8% → −1.4% | −11.2% → −8.3% | −8.7% → −6.0% | −0.4% → +0.2% | −3.3% → −1.5% | +16.7% → +19.6% |
 
 Smearing removes the small LOYO bias but does not explain the Portuguese backtest drift
-(−27% → −21%), and in Poland it makes the backtest worse. The LOYO biases without it are small
+(−27% → −21%), and in Poland and Chile it makes the backtest worse. The LOYO biases without it are small
 (below 7%), so the plain model is kept.
 
 ## 8. Other calibration factors
 
-| | PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|---|
-| NOAA-20 factor (S-NPP / NOAA-20, 2018–2025) | 0.922 | 0.962 | 0.941 | 0.917 | 0.956 | 0.975 | 0.968 |
-| Terra-only ratio (Terra+Aqua)/Terra, DJF/MAM/JJA/SON | 2.10 (all year) | 2.25/1.95/1.70/1.86 | 2.13/1.60/1.66/1.60 | 3.88/2.16/1.76/2.18 | 3.47/2.19/1.54/2.19 | 1.70/2.69/2.28/1.70 | 1.79/1.68/1.34/1.72 |
-| Terra-only extra sigma (log) | 0.40 | 0.28 | 0.15 | 0.40 | 0.34 | 0.15 | 0.14 |
+| | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| NOAA-20 factor (S-NPP / NOAA-20, 2018–2025) | 0.922 | 0.962 | 0.941 | 0.917 | 0.956 | 0.975 | 0.968 | 0.977 |
+| Terra-only ratio (Terra+Aqua)/Terra, DJF/MAM/JJA/SON | 2.10 (all year) | 2.25/1.95/1.70/1.86 | 2.13/1.60/1.66/1.60 | 3.88/2.16/1.76/2.18 | 3.47/2.19/1.54/2.19 | 1.70/2.69/2.28/1.70 | 1.79/1.68/1.34/1.72 | 1.92/4.48/3.73/1.94 |
+| Terra-only extra sigma (log) | 0.40 | 0.28 | 0.15 | 0.40 | 0.34 | 0.15 | 0.14 | 0.29 |
 
 - **NOAA-20 factor.** S-NPP ends on 2 Nov 2026 and NOAA-20 continues the VIIRS series. NOAA-20
   sees 2–9% more cell-days, so its counts are scaled down by this factor. Values close to 1
@@ -168,13 +176,25 @@ Smearing removes the small LOYO bias but does not explain the Portuguese backtes
 The calendar shows the model estimate before February 2012 and observed S-NPP after it.
 Ratio of harmonized annual totals 2012 / 2011:
 
-| PL | PT | ES | GR | UA | AU | CA |
-|---|---|---|---|---|---|---|
-| 1.11 | 1.12 | 0.97 | 0.85 | 0.64 | 1.00 | 1.03 |
+| PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|
+| 1.11 | 1.12 | 0.97 | 0.85 | 0.64 | 1.00 | 1.03 | 0.97 |
 
 There is no artificial jump at 2012; a naive splice of raw MODIS and VIIRS would jump by the
 factor in section 3 (×1.7 to ×3.5). The Ukrainian drop is real: raw MODIS itself fell by 32%
 from 2011 to 2012 (16,038 → 10,871 cell-days).
+
+Known events in Chile (MODIS / S-NPP cell-days, rank among all S-NPP months 2012–2025):
+
+| Month | Event | MODIS | S-NPP | Rank |
+|---|---|---|---|---|
+| 2017-01 | central Chile fire storm (Maule, O'Higgins) | 1,067 | 1,353 | 8 |
+| 2023-02 | Ñuble, Biobío, Araucanía | 1,108 | 1,700 | 2 |
+| 2024-02 | Valparaíso / Viña del Mar | 185 | 520 | 71 |
+
+Both sensors put the large 2017 and 2023 events at the top. The 2024 fire was deadly but
+compact (a few cells at the urban edge over a few days), so it barely shows in cell-days.
+The calendar measures widespread fire activity, not the impact of a single fire.
 
 ## 10. Data quality checks
 
@@ -183,6 +203,7 @@ from 2011 to 2012 (16,038 → 10,871 cell-days).
   re-downloaded. The pipeline now drops incomplete rows with a warning instead of failing silently.
 - Totals in each `cells.json` equal the totals of the cell-day cache (checked by tests).
 - One Polish cell and month checked by hand against the raw CSV (19 unique days = 19 cell-days).
+- Chile (48 files, downloaded 2026-11-14) checked the same way: all files complete, Jan–Dec coverage.
 
 ## 11. Automated tests
 
@@ -201,7 +222,7 @@ from 2011 to 2012 (16,038 → 10,871 cell-days).
 | Confidence in 2000–2011 estimates | Countries | Why |
 |---|---|---|
 | High | AU, CA, ES | high correlation, monthly error 10–22%, stable backtest |
-| Good, older years may be low | PT, GR, UA | good LOYO, systematic backtest underestimate (−9% to −27%) |
+| Good, older years may be biased | PT, GR, UA, CL | good LOYO, systematic backtest drift (PT, GR, UA low by 9–27%; CL high by 17%) |
 | Lower | PL | small, short agricultural fires; sensors see different events; monthly error ~×1.5 |
 
 In every country the harmonized series is much closer to observed VIIRS than any constant
