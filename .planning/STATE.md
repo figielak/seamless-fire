@@ -11,12 +11,14 @@ Updated: 2026-11-14
 - Main page `src/pages/index.astro` is map-first: full-screen Leaflet map, left control panel (country, area,
   period, raw/harmonized toggle in "Values"), Now card, bottom dock (Calendar / Per year / Anomalies / About).
   Map layer = per-cell share of the harmonized total (`src/lib/cellmap.ts`; preset cells sum to `harmonizeArea`).
+- "All countries (8)" view: `WORLD_CODE = 'ALL'` (`src/lib/world.ts`): each country harmonized with its own model,
+  then summed; hotspot export stays per country; live cold first load ~7 s. Map colours: one fixed scale for all countries.
 - Raw toggle: `rawSplice`/`rawRatio` in `src/lib/harmonize.ts`, link `v=raw`; changes calendar + per-year only.
 - Method page `src/pages/method.astro`: tables built from `public/data/{CC}/model.json` at build time,
   before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.
 - Season profile and briefing **dropped** (user decision, time).
 - Logic: `src/lib/harmonize.ts`, `stats.ts`, `geo.ts`, `csv.ts`, `cellmap.ts`
-- Tests: `python -m unittest discover -s pipeline/tests` (20), `npm run test:site` (69), `npm run check` (0 errors)
+- Tests: `python -m unittest discover -s pipeline/tests` (20), `npm run test:site` (73), `npm run check` (0 errors)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`)
 
