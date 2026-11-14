@@ -265,6 +265,7 @@ import Base from '../layouts/Base.astro';
   }
 
   async function init() {
+    plotly(); // start loading Plotly in parallel with the data
     try {
       countries = await fetchJson<Country[]>('countries.json');
     } catch {
