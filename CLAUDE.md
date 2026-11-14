@@ -7,6 +7,12 @@ Team "Lone Pixel" (solo), local event Rzeszów.
 Full context:
 - `docs/plan.md`: method decisions, data contract, pages, work order, submission checklist
 - `docs/koncepcja.md`: product concept, users, differentiators (Polish)
+- `docs/modis_guide.md`: MODIS C6 active fire notes (`type` codes, confidence, Terra-only 2000–2002,
+  sensor gaps: Terra Sep 2000, Aqua 16 Aug–2 Sep 2020, no sub-8-day series, not burned area)
+- `docs/viirs_guide.md`: VIIRS notes (from the burned area guide, not the 375 m hotspot guide;
+  S-NPP outage 27 Jul–10 Aug 2022)
+- `.planning/codex_plan.md`: independent plan by Codex, **second opinion only, not followed**
+  (header lists differences and ideas worth considering)
 
 ## Working memory: `.planning/`
 
@@ -37,7 +43,7 @@ src/                 Astro site, plain TypeScript in <script> tags, no React
 docs/                plan and concept
 ```
 
-Stack: Python (pandas, numpy), Astro, `plotly.js-dist-min`. Optional later: Leaflet.
+Stack: Python (pandas, numpy), Astro, `plotly.js-dist-min`. Leaflet (+ polygon drawing) for the area map.
 Hosting: GitHub Pages via GitHub Actions.
 
 Commands:
@@ -61,13 +67,18 @@ Commands:
    Compare A (global ratio), B (country ratio), C (country × month ratio), D, E.
    Plus backtest: calibrate 2019–2025, test 2012–2018.
 6. 2000–2011: model applied to MODIS, ~80% interval from LOYO residual SD in log space.
-7. **Custom area:** the browser sums raw cell-days inside the rectangle first, then applies
+   Terra-only months (before Aqua data start, ~mid-2002): scale MODIS cell-days by the country
+   (Terra+Aqua)/Terra ratio first, widen the interval for that extra step.
+   Calibration excludes S-NPP Jul–Aug 2022 and Aqua Aug–Sep 2020 (sensor outages).
+7. **Custom area** (rectangle or polygon; a cell is inside if its center is inside the shape):
+   the browser sums raw cell-days inside the area first, then applies
    the model. Never sum per-cell harmonized values (log model is not additive).
    Show an "higher uncertainty" note when the area is smaller than the country.
 8. Anomaly: `(x + k) / (median + k)`, median of the same calendar month over the last
    10 complete years; `k` scales with the area (e.g. fraction of mean monthly median),
    not a fixed 10. Also percentile of the month among all years.
-9. Months with preliminary data are flagged.
+9. Months with preliminary data are flagged. Low-quality months are flagged too:
+   Jan–Oct 2000 (Terra), Aug–Sep 2020 (Aqua), Jul–Aug 2022 (S-NPP).
 
 ## Data contract (`public/data/`)
 
@@ -133,7 +144,9 @@ Then: raw/harmonized toggle, annual chart with uncertainty, season profile,
 template-based area briefing (no AI), "Method" page (method comparison, before/after 2012,
 filtered industrial share, limitations).
 
-Optional: Leaflet rectangle drawing, cell map for a selected month.
+Area polygon: Leaflet map where the user draws a polygon (rectangle inputs stay as the
+fallback without the map). Presets may be polygons (e.g. Biebrza outline). Hotspot CSV export
+uses point-in-polygon on hotspots. Optional: cell map for a selected month.
 
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
@@ -146,11 +159,11 @@ Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 2. Pipeline: validation A–E, model → `model.json`.
 3. Site minimum: country select, calendar, "Now" panel. **Deploy to GitHub Pages immediately.**
 4. Pipeline: other countries, 2026 data, hotspot files.
-5. Site: rectangle, date range, CSV export, anomalies, annual chart.
+5. Site: rectangle, Leaflet polygon, date range, CSV export, anomalies, annual chart.
 6. Site: raw/harmonized toggle, season profile, briefing, Method page.
 7. README (English, license, data sources, LLM disclosure).
 
-If time runs out, drop in this order: Leaflet map → season profile → briefing →
+If time runs out, drop in this order: Leaflet polygon (keep rectangle inputs) → season profile → briefing →
 2026 data → countries other than PL and PT.
 
 Work one stage at a time and report results before moving on.

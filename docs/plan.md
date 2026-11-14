@@ -145,7 +145,8 @@ Pułapki w danych:
 **Strona „Method”:** tabela porównania metod, wykres „przed i po” dla 2012 r., udział
 odfiltrowanego przemysłu, ograniczenia.
 
-**Opcjonalne:** mapa Leaflet z rysowaniem prostokąta, mapa komórek dla wybranego miesiąca.
+**Wielokąt:** mapa Leaflet z rysowaniem wielokąta (pola W, S, E, N zostają jako zapas).
+**Opcjonalne:** mapa komórek dla wybranego miesiąca.
 
 ### 5.5 Szczegóły techniczne
 
