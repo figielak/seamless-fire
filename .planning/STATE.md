@@ -26,8 +26,9 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. Final pass before judging: live check of all countries and presets, known events (PL Apr 2020, PT Sep 2024, PT Aug 2025),
-   Space Apps submission form (project link, README, demo).
+1. Final live check done 2026-11-14 (all 8 countries + All, presets, events, CSV exports, Method page).
+   Remaining for the user: Space Apps submission form (docs/plan.md §6) and the 7-slide demo.
+   Demo tip: open "All countries" (and AU) before presenting; cold load measured 26 s (AU cells.json 23.8 MB).
 
 ## Blockers / open questions
 
