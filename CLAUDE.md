@@ -180,6 +180,13 @@ Below 1150 px everything stacks in one column. Map colours use one fixed scale f
 (`src/lib/world.ts`): each country harmonized with its own model, then summed (series, annual totals
 and intervals, map layers); hotspot export only per country.
 
+Live period (stage C, 2026-11-14): `src/lib/live.ts` adds `{CC}/live.json` to the cells at load time
+(NOAA-20 × n20_factor, model.live, `seriesEnd(model)` = series end); the current month is "month to date"
+(`Harmonized.partial`): not ranked in anomalies or "vs typical", the "Now" panel compares days 1..D with the
+same days of 2012–2025 (`{CC}/daily/`), live gaps left out of both sides. Tab "This season" (`src/lib/season.ts`):
+cumulative cell-days since 1 Jan vs 2012–2025 (P10–P90, median), exact at day D. Map and hotspot export read
+`hotspots/live.csv`; monthly CSV has `viirs_source` and `month_to_date`.
+
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 - GitHub: `figielak/seamless-fire` (remote `origin`, SSH), site https://figielak.github.io/seamless-fire/. `site`/`base` come from env `SITE`/`BASE`, set by `.github/workflows/deploy.yml` from `configure-pages`

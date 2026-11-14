@@ -69,7 +69,7 @@ test('lookup finds the cell by coordinates, including negative ones', () => {
   const h = {
     firstMonth: '2000-01', value: new Float64Array(2), lo: new Float64Array(2), hi: new Float64Array(2),
     modis: new Float64Array(2), viirs: new Float64Array(2), estimated: [false, false], terraOnly: [false, false],
-    lowQuality: [false, false], preliminary: [false, false], area: false,
+    lowQuality: [false, false], preliminary: [false, false], partial: [false, false], area: false,
   };
   const layer = cellLayer(cells, h, 0, 1);
   assert.equal(layer.value.length, 2);

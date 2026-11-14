@@ -26,7 +26,7 @@ Updated: 2026-11-14
   before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.
 - Season profile and briefing **dropped** (user decision, time).
 - Logic: `src/lib/harmonize.ts`, `stats.ts`, `geo.ts`, `csv.ts`, `cellmap.ts`
-- Tests: `python -m unittest discover -s pipeline/tests` (27), `npm run test:site` (74), `npm run check` (0 errors)
+- Tests: `python -m unittest discover -s pipeline/tests` (36), `npm run test:site` (81), `npm run check` (0 errors)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`)
 
@@ -36,7 +36,8 @@ Daily NRT updates ("present" = today), stages A–D agreed with the user 2026-11
 - A done (uncommitted): `pipeline/borders.py` → `live/borders.json`, masks → `live/masks/`, `pipeline/live_base.py`
   → `public/data/{CC}/daily/` + `live/nrt/`, `live/coverage.json` (seed NOAA-20 1–12 Nov 2026).
 - B done (uncommitted): `pipeline/live_update.py`, idempotent, real download ~1.5 min, tests in `pipeline/tests/test_live.py`.
-- C next: site (month to date, "Now" vs same days 2012–2025, "This season" tab). D: GitHub Actions daily cron.
+- C done (uncommitted): live month in calendar/areas/map/export, "Now" month to date, tab "This season". Site tests 81.
+- D next: GitHub Actions daily cron (`python pipeline/live_update.py`, commit if changed, deploy).
 
 ## Blockers / open questions
 

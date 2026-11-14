@@ -27,7 +27,7 @@ import {
   serializeHash,
 } from './geo.ts';
 import { topAnomalies } from './stats.ts';
-import { exportHotspots, filterHotspots, hotspotYears, monthlyCsv } from './csv.ts';
+import { exportHotspots, filterHotspots, hotspotFiles, hotspotYears, monthlyCsv } from './csv.ts';
 
 const ROOT = new URL('../../', import.meta.url);
 const read = (p: string) => JSON.parse(readFileSync(new URL(p, ROOT), 'utf-8'));
@@ -216,21 +216,26 @@ test('hotspot filter and export', async () => {
   assert.throws(() => filterHotspots('a,b\n', null, '2020-01', '2020-12'));
 
   const ok = await exportHotspots({
-    code: 'PL', years: [2020, 2021], keep, from: '2020-04', to: '2021-12', signal: new AbortController().signal,
+    code: 'PL', files: ['2020', '2021'], keep, from: '2020-04', to: '2021-12', signal: new AbortController().signal,
     fetchText: async (p) => (p.endsWith('2020.csv') ? csv : 'date,time,lat,lon,sensor,frp\n'),
   });
   assert.equal(ok.rows, 2);
   await assert.rejects(exportHotspots({
-    code: 'PL', years: [2020, 2021], keep, from: '2020-01', to: '2021-12', signal: new AbortController().signal,
+    code: 'PL', files: ['2020', '2021'], keep, from: '2020-01', to: '2021-12', signal: new AbortController().signal,
     fetchText: async (p) => { if (p.endsWith('2021.csv')) throw new Error('404'); return csv; },
   }), /404/);
   const ac = new AbortController();
   await assert.rejects(exportHotspots({
-    code: 'PL', years: [2020, 2021], keep, from: '2020-01', to: '2021-12', signal: ac.signal,
+    code: 'PL', files: ['2020', '2021'], keep, from: '2020-01', to: '2021-12', signal: ac.signal,
     fetchText: async () => { ac.abort(); return csv; },
   }));
 
   const { model } = load('PL');
   assert.deepEqual(hotspotYears(model, '2019-06', '2021-02'), [2019, 2020, 2021]);
   assert.deepEqual(hotspotYears(load('AU').model, '2019-06', '2021-02'), []);
+  // live file only when the range reaches past the last complete month and live data exist
+  const withLive = { ...model, live: { lastMonth: '2026-11' } } as unknown as typeof model;
+  assert.deepEqual(hotspotFiles(withLive, '2026-09', '2026-11'), ['2026', 'live']);
+  assert.deepEqual(hotspotFiles(withLive, '2026-09', '2026-10'), ['2026']);
+  assert.deepEqual(hotspotFiles(model, '2026-09', '2026-11'), ['2026']);
 });

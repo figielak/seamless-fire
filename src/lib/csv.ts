@@ -14,13 +14,16 @@ export function monthlyCsv(h: Harmonized, model: Model, fromIdx = 0, toIdx = h.v
   const modisSpan = coverageSpan(model, ['Terra', 'Aqua']);
   const viirsSpan = coverageSpan(model, ['SNPP']);
   const within = (a: number, s: [number, number] | null) => !s || (a >= s[0] && a <= s[1]);
+  // Live months (after last_complete_month): VIIRS = NOAA-20 cell-days × n20_factor, detections
+  // are raw NOAA-20; month_to_date = the month is not complete yet.
+  const lastComplete = monthAbs(model.last_complete_month);
   const rows = [
-    'month,harmonized_celldays,lo80,hi80,estimated,modis_celldays,viirs_snpp_celldays,' +
-      'viirs_snpp_detections,terra_only,low_quality,preliminary',
+    'month,harmonized_celldays,lo80,hi80,estimated,modis_celldays,viirs_celldays,' +
+      'viirs_detections,viirs_source,terra_only,low_quality,preliminary,month_to_date',
   ];
   for (let i = Math.max(fromIdx, 0); i <= Math.min(toIdx, h.value.length - 1); i++) {
     const a = first + i;
-    const vOk = within(a, viirsSpan);
+    const vOk = within(a, viirsSpan) || a > lastComplete;
     rows.push([
       monthStr(a),
       num(h.value[i]),
@@ -30,9 +33,11 @@ export function monthlyCsv(h: Harmonized, model: Model, fromIdx = 0, toIdx = h.v
       within(a, modisSpan) ? num(h.modis[i]) : '',
       vOk ? num(h.viirs[i]) : '',
       h.viirsDet && vOk ? num(h.viirsDet[i]) : '',
+      a > lastComplete ? 'NOAA-20 x factor' : vOk && !h.estimated[i] ? 'S-NPP' : '',
       h.terraOnly[i] ? 1 : 0,
       h.lowQuality[i] ? 1 : 0,
       h.preliminary[i] ? 1 : 0,
+      h.partial?.[i] ? 1 : 0,
     ].join(','));
   }
   return rows.join('\n') + '\n';
@@ -66,7 +71,7 @@ export function filterHotspots(
 
 export interface HotspotJob {
   code: string;
-  years: number[]; // years with hotspot files inside the range
+  files: string[]; // hotspot files inside the range: years ("2020") and "live" (hotspotFiles)
   keep: ((lat: number, lon: number) => boolean) | null;
   from: string; // YYYY-MM
   to: string;
@@ -78,15 +83,22 @@ export interface HotspotJob {
 /** Whole CSV or an error: a failed or cancelled year never yields a partial file. */
 export async function exportHotspots(job: HotspotJob): Promise<{ csv: string; rows: number }> {
   const rows: string[] = [HOTSPOT_HEADER];
-  for (let k = 0; k < job.years.length; k++) {
+  for (let k = 0; k < job.files.length; k++) {
     job.signal.throwIfAborted();
-    const y = job.years[k];
-    const text = await job.fetchText(`${job.code}/hotspots/${y}.csv`, job.signal);
+    const text = await job.fetchText(`${job.code}/hotspots/${job.files[k]}.csv`, job.signal);
     rows.push(...filterHotspots(text, job.keep, job.from, job.to));
-    job.onProgress?.(k + 1, job.years.length, rows.length - 1);
+    job.onProgress?.(k + 1, job.files.length, rows.length - 1);
   }
   job.signal.throwIfAborted();
   return { csv: rows.join('\n') + '\n', rows: rows.length - 1 };
+}
+
+/** Hotspot files for the month range: yearly files, then "live" (near real-time period after
+ * last_complete_month, hotspots/live.csv) when the range reaches into it. */
+export function hotspotFiles(model: Model, from: string, to: string): string[] {
+  const files = hotspotYears(model, from, to).map(String);
+  if (model.hotspots && model.live && to > model.last_complete_month) files.push('live');
+  return files;
 }
 
 /** Years with hotspot files that overlap the month range. */

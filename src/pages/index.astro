@@ -117,6 +117,7 @@ import Base from '../layouts/Base.astro';
       <div class="dock-tabs" role="tablist">
         <button type="button" role="tab" data-tab="calendar" aria-selected="true">Calendar</button>
         <button type="button" role="tab" data-tab="annual" aria-selected="false">Per year</button>
+        <button type="button" role="tab" data-tab="season" aria-selected="false">This season</button>
         <button type="button" role="tab" data-tab="anomalies" aria-selected="false">Top anomalies</button>
         <button type="button" role="tab" data-tab="about" aria-selected="false">How to read it</button>
       </div>
@@ -136,6 +137,11 @@ import Base from '../layouts/Base.astro';
           <p class="unit"><span id="annual-unit">sum of monthly cell-days, ~80% interval for estimated years</span>.</p>
           <div id="annual" class="annual"></div>
           <p class="note" id="annual-note"></p>
+        </div>
+        <div class="tab" data-tab="season" hidden>
+          <p class="unit">Fire cell-days since 1 January, this year against the VIIRS years (VIIRS S-NPP scale).</p>
+          <div id="season" class="annual"></div>
+          <p class="note" id="season-note"></p>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
           <p class="unit">Months most above their usual level, in the selected period. Click a row to map it.</p>
@@ -182,6 +188,12 @@ import Base from '../layouts/Base.astro';
             <li>
               Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
               (Aug–Sep 2020), S-NPP outage (Jul–Aug 2022). Aug–Oct 2026 are preliminary (near real-time).
+            </li>
+            <li>
+              <b>Current month</b>: updated every day from FIRMS near real-time NOAA-20 data, scaled to S-NPP by
+              the per-country factor (S-NPP near real-time data ended in early November 2026). The month is marked
+              "month to date" and is not ranked against full months: the "Now" panel compares its first days with
+              the same days in earlier VIIRS years (2012 on). Days without data are left out of both sides.
             </li>
             <li>
               Data: NASA FIRMS active fire products (MODIS Collection 6.1, VIIRS 375 m from S-NPP and
@@ -927,7 +939,9 @@ import Base from '../layouts/Base.astro';
 </style>
 
 <script>
-  import { dataUrl, fetchJson, loadCountry, type Country, type CountryData } from '../lib/data';
+  import { dataUrl, fetchJson, loadCountry, loadDaily, type Country, type CountryData } from '../lib/data';
+  import { comparedDays, mtdStats, sameDaysHistory, seriesEnd, type LiveInfo } from '../lib/live';
+  import { seasonData, seasonYears } from '../lib/season';
   import {
     annualTotals,
     coverageSpan,
@@ -955,7 +969,7 @@ import Base from '../layouts/Base.astro';
     type ViewState,
   } from '../lib/geo';
   import { monthStats, topAnomalies } from '../lib/stats';
-  import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
+  import { exportHotspots, hotspotFiles, monthlyCsv } from '../lib/csv';
   import {
     cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
   } from '../lib/cellmap';
@@ -997,6 +1011,7 @@ import Base from '../layouts/Base.astro';
   const calEl = $('calendar');
   const noteEl = $('calendar-note');
   const annualEl = $('annual');
+  const seasonEl = $('season');
   const annualNote = $('annual-note');
   const anomEl = $('anomalies');
   const customEl = $('custom');
@@ -1065,27 +1080,91 @@ import Base from '../layouts/Base.astro';
 
   // ------------------------------------------------------------------ "Now" panel
 
-  function renderNow(country: Country, d: CountryData, h: Harmonized) {
-    const idx = h.value.length - 1;
-    const s = monthStats(h, idx);
-    const calName = MONTHS_LONG[(monthAbs(s.month) % 12)];
-    let compare: string;
-    if (s.ratio === null) {
-      compare = `<p class="note">Not enough history for a typical value.</p>`;
-    } else {
-      const r = s.ratio;
-      const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
-      const cls = r >= 1.25 ? 'hi' : r <= 0.8 ? 'lo' : 'mid';
-      compare = `
+  /** "× typical" figure and the history lines shared by full months and month to date. */
+  function compareHtml(
+    s: { ratio: number | null; median: number | null; p10: number | null; p90: number | null; percentile: number;
+      nAll: number; refFrom: number; refTo: number },
+    what: string, // "the usual October" / "1–13 November in earlier years"
+    rankOf: string, // "26 Octobers" / "15 years (1–13 Nov)"
+  ): string {
+    if (s.ratio === null) return `<p class="note">Not enough history for a typical value.</p>`;
+    const r = s.ratio;
+    const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
+    const cls = r >= 1.25 ? 'hi' : r <= 0.8 ? 'lo' : 'mid';
+    return `
         <div class="now-fig ${cls}"><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b>
-          <span>typical, ${word} the usual ${calName}</span></div>
+          <span>typical, ${word} ${what}</span></div>
         <dl>
           <div><dt>typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
           <div><dt>usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
-          <div><dt>rank among ${s.nAll} ${calName}s</dt>
+          <div><dt>rank among ${rankOf}</dt>
           <dd>above ${Math.round(s.percentile)}%</dd></div>
         </dl>`;
+  }
+
+  let nowToken = 0;
+
+  /** Same days of the current (partial) month in earlier years, for the selected area; summed over
+   * countries in "All countries". Daily files are cached in data.ts. */
+  async function sameDaysTotals(d: CountryData, info: LiveInfo): Promise<{ hist: Map<number, number>; days: Set<number> }> {
+    const shape = resolveShape(state.area);
+    const keep = shape ? keepFn(shape) : undefined;
+    const days = comparedDays(info);
+    const parts = current?.parts ? current.parts.map((p) => p.d) : [d];
+    const month = Number(info.lastMonth.slice(5, 7));
+    const dailies = await Promise.all(parts.map((p) => loadDaily(p.code, month)));
+    const hist = new Map<number, number>();
+    dailies.forEach((dl, k) => {
+      for (const [y, v] of sameDaysHistory(dl, days, parts[k].cells.cell_deg, keep)) hist.set(y, (hist.get(y) ?? 0) + v);
+    });
+    return { hist, days };
+  }
+
+  function renderNow(country: Country, d: CountryData, h: Harmonized) {
+    const token = ++nowToken;
+    const idx = h.value.length - 1;
+    const label = areaLabel(state.area);
+    const title = `<h2>Now · ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}</h2>`;
+    const areaNote = h.area ? ' · custom area: higher uncertainty' : '';
+    const info = d.model.live as LiveInfo | undefined;
+
+    if (h.partial[idx] && info) {
+      // Current month so far: compare with the same days of earlier VIIRS years.
+      const ym = monthStr(monthAbs(h.firstMonth) + idx);
+      const calName = MONTHS_LONG[Number(ym.slice(5, 7)) - 1];
+      const span = `1–${info.throughDay} ${calName.slice(0, 3)}`;
+      const prev = monthStats(h, idx - 1);
+      const prevName = MONTHS_LONG[monthAbs(prev.month) % 12];
+      const prevLine = prev.ratio === null ? '' :
+        ` · last full month ${monthLabel(prev.month)}: ${fmt(prev.value)} cell-days,
+          ${prev.ratio >= 10 ? prev.ratio.toFixed(0) : prev.ratio.toFixed(1)}× the usual ${prevName}`;
+      const head = `
+      <div class="now-head">
+        ${title}
+        <p class="now-month">${calName} ${ym.slice(0, 4)} so far (${span})<span class="flag">month to date</span><span class="flag">near real-time</span></p>
+        <p class="now-note">Data through ${info.last} UTC · NOAA-20 on the S-NPP scale (${current?.parts ? 'factor per country' : `× ${info.factor.toFixed(3)}`})${areaNote}${prevLine}</p>
+      </div>
+      <div class="now-fig"><b>${fmt(h.value[idx])}</b><span>fire cell-days, ${span}</span></div>`;
+      nowEl.innerHTML = head + `<p class="note now-wait">Comparing with ${span} in earlier years…</p>`;
+      nowEl.hidden = false;
+      void (async () => {
+        try {
+          const { hist, days } = await sameDaysTotals(d, info);
+          if (token !== nowToken) return;
+          const st = mtdStats(h.value[idx], hist, info, d.model, days.size, monthStats(h, idx).k);
+          const gapNote = days.size < info.throughDay
+            ? `<p class="note">${info.throughDay - days.size} day(s) without data are left out of both sides.</p>` : '';
+          nowEl.innerHTML = head + compareHtml(st, `${span} in earlier years`, `${st.nAll} years (${span}, ${st.firstYear}–${ym.slice(0, 4)})`) + gapNote;
+        } catch (err) {
+          console.error(err);
+          if (token === nowToken) nowEl.innerHTML = head + `<p class="note">The comparison with earlier years could not be loaded.</p>`;
+        }
+      })();
+      return;
     }
+
+    const s = monthStats(h, idx);
+    const calName = MONTHS_LONG[(monthAbs(s.month) % 12)];
     const interval = h.estimated[idx]
       ? `, estimated (~80%: ${fmt(h.lo[idx])} – ${fmt(h.hi[idx])})`
       : '';
@@ -1093,16 +1172,15 @@ import Base from '../layouts/Base.astro';
       h.preliminary[idx] ? 'preliminary (near real-time)' : '',
       h.lowQuality[idx] ? 'known sensor problem' : '',
     ].filter(Boolean);
-    const label = areaLabel(state.area);
     nowEl.innerHTML = `
       <div class="now-head">
-        <h2>Now · ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}</h2>
+        ${title}
         <p class="now-month">${monthLabel(s.month)}${flags.map((f) => `<span class="flag">${f}</span>`).join('')}</p>
         <p class="now-note">Latest complete month · VIIRS S-NPP scale · model
-          ${escapeHtml(d.model.model)}${h.area ? ' · custom area: higher uncertainty' : ''}</p>
+          ${escapeHtml(d.model.model)}${areaNote}</p>
       </div>
       <div class="now-fig"><b>${fmt(s.value)}</b><span>fire cell-days${interval}</span></div>
-      ${compare}`;
+      ${compareHtml(s, `the usual ${calName}`, `${s.nAll} ${calName}s`)}`;
     nowEl.hidden = false;
   }
 
@@ -1123,10 +1201,14 @@ import Base from '../layouts/Base.astro';
     const text: string[][] = years.map(() => new Array(12).fill(''));
     const lowX: number[] = [], lowY: number[] = [];
     const preX: number[] = [], preY: number[] = [];
+    const partX: number[] = [], partY: number[] = [];
+    const liveInfo = d.model.live as LiveInfo | undefined;
+    const lastComplete = monthAbs(d.model.last_complete_month);
     // Months outside a sensor's raw-file coverage show "no data", not 0.
     const [modisFrom, modisTo] = coverageSpan(d.model, ['Terra', 'Aqua']) ?? [-Infinity, Infinity];
     const [viirsFrom, viirsTo] = coverageSpan(d.model, ['SNPP']) ?? [-Infinity, Infinity];
     const raw = (v: number, a: number, from: number, to: number) => (a < from || a > to ? 'no data' : fmt(v));
+    const rawV = (v: number, a: number) => (a > lastComplete ? fmt(v) : raw(v, a, viirsFrom, viirsTo));
     let max = 0;
     for (let i = fromIdx; i <= toIdx; i++) {
       const a = first + i;
@@ -1134,7 +1216,9 @@ import Base from '../layouts/Base.astro';
       const c = a % 12;
       const v = h.value[i];
       max = Math.max(max, v);
+      const part = h.partial[i];
       const st = monthStats(hh, i);
+      if (part) st.ratio = null; // month to date: compared in the "Now" panel, same days only
       z[r][c] = anom
         ? (st.ratio === null ? null : Math.max(-ANOM_LOG2, Math.min(ANOM_LOG2, Math.log2(st.ratio))))
         : Math.log10(1 + v);
@@ -1144,18 +1228,28 @@ import Base from '../layouts/Base.astro';
           ? `${a < monthAbs(d.model.viirs_first_month) ? 'Raw MODIS' : 'Raw VIIRS'}: <b>${fmt(v)}</b> cell-days`
           : `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
       ];
+      if (part && liveInfo) {
+        lines.push(`So far: 1–${liveInfo.throughDay} ${MONTHS[c]} (month to date)`, 'Comparison with earlier years: see "Now"');
+        partX.push(c); partY.push(years[r]);
+      }
+      if (a > lastComplete && !h.raw) {
+        lines.push(`NOAA-20 near real-time, ${current?.parts ? 'factor per country' : `× ${d.model.n20_factor.toFixed(3)}`} (S-NPP scale)`);
+      }
       if (st.ratio !== null) {
         const rt = st.ratio >= 10 ? st.ratio.toFixed(0) : st.ratio.toFixed(1);
         lines.push(`<b>${rt}×</b> typical (median ${st.refFrom}–${st.refTo}: ${fmt(st.median!)})`);
       } else if (anom) lines.push('Not enough earlier years for a typical value');
       if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
       lines.push(
-        `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${raw(h.viirs[i], a, viirsFrom, viirsTo)}`,
+        `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${rawV(h.viirs[i], a)}`,
       );
-      if (h.viirsDet && !h.estimated[i]) lines.push(`VIIRS detections: ${fmt(h.viirsDet[i])}`);
+      if (h.viirsDet && !h.estimated[i]) lines.push(`${a > lastComplete ? 'NOAA-20' : 'VIIRS'} detections: ${fmt(h.viirsDet[i])}`);
       if (h.terraOnly[i]) lines.push('Terra only (before Aqua), scaled up');
       if (h.lowQuality[i]) { lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
-      if (h.preliminary[i]) { lines.push('Preliminary (near real-time)'); preX.push(c); preY.push(years[r]); }
+      if (h.preliminary[i]) {
+        lines.push('Preliminary (near real-time)');
+        if (!part) { preX.push(c); preY.push(years[r]); }
+      }
       text[r][c] = lines.join('<br>');
     }
 
@@ -1163,7 +1257,7 @@ import Base from '../layouts/Base.astro';
     // at 0 would paint every month in the same bright end of the scale.
     // Months with sensor problems (e.g. Terra-only 2000) are left out of the range.
     const shown: number[] = [];
-    for (let i = fromIdx; i <= toIdx; i++) if (!h.lowQuality[i]) shown.push(h.value[i]);
+    for (let i = fromIdx; i <= toIdx; i++) if (!h.lowQuality[i] && !h.partial[i]) shown.push(h.value[i]);
     shown.sort((p, q) => p - q);
     const low = shown[Math.floor(shown.length * 0.02)] ?? 0;
     const zmin = low >= 10 ? Math.log10(1 + low) : 0;
@@ -1220,6 +1314,10 @@ import Base from '../layouts/Base.astro';
       {
         type: 'scatter', mode: 'markers', x: [], y: [], name: 'on the map', hoverinfo: 'skip',
         marker: { symbol: 'square-open', size: 16, line: { width: 2.5, color: '#e8432e' } },
+      },
+      {
+        type: 'scatter', mode: 'markers', x: partX, y: partY, name: 'month to date', hoverinfo: 'skip',
+        marker: { symbol: 'circle-open-dot', size: 11, line: { width: 2, color: '#f28e2b' }, color: '#f28e2b' },
       },
     ];
 
@@ -1366,6 +1464,83 @@ import Base from '../layouts/Base.astro';
       (partial.length ? `Hatched: partial year (${partial.join(', ')}), not comparable with full years.` : '');
   }
 
+  // ------------------------------------------------------------------ this season
+
+  let seasonToken = 0;
+
+  async function renderSeason() {
+    if (!current || !seasonEl.offsetParent) return; // hidden tab: rendered when shown
+    const token = ++seasonToken;
+    const { d, h, country } = current;
+    const info = d.model.live as LiveInfo | undefined;
+    const idx = h.value.length - 1;
+    let partial: { day: number; hist: Map<number, number> } | null = null;
+    try {
+      if (h.partial[idx] && info) partial = { day: info.throughDay, hist: (await sameDaysTotals(d, info)).hist };
+    } catch (err) {
+      console.error(err); // without the daily history the curve stops at the last full month
+    }
+    const Plotly = await plotly();
+    if (token !== seasonToken || !current) return;
+    const years = seasonYears(h, d.model.viirs_first_month);
+    // Without the daily history a partial month cannot be compared: drop it from the chart.
+    const hs = partial || !h.partial[idx] ? h : { ...h, value: h.value.slice(0, idx), partial: h.partial.slice(0, idx) };
+    const sd = seasonData(hs, years, partial);
+    const doyLabel = (x: number) => {
+      const dt = new Date(Date.UTC(2025, 0, 1) + (x - 1) * 86_400_000);
+      return x === 0 ? '1 Jan' : `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
+    };
+    const hover = (name: string, ys: number[]) => ys.map((v, k) => `<b>${name}</b>, by ${doyLabel(sd.x[k])}: ${fmt(v)} cell-days`);
+    const data: Partial<Plotly.Data>[] = [
+      ...sd.history.map((c) => ({
+        type: 'scatter', mode: 'lines', x: sd.x, y: c.y, name: String(c.year), showlegend: false,
+        line: { color: 'rgba(87,96,106,0.28)', width: 1 }, text: hover(String(c.year), c.y),
+        hovertemplate: '%{text}<extra></extra>',
+      }) as Partial<Plotly.Data>),
+      { type: 'scatter', mode: 'lines', x: sd.x, y: sd.p10, line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+      {
+        type: 'scatter', mode: 'lines', x: sd.x, y: sd.p90, fill: 'tonexty', fillcolor: 'rgba(0,34,78,0.12)',
+        line: { width: 0 }, name: `usual range (P10–P90, ${years[0]}–${years[years.length - 1]})`, hoverinfo: 'skip',
+      },
+      {
+        type: 'scatter', mode: 'lines', x: sd.x, y: sd.p50, name: 'median', line: { color: '#00224e', width: 2, dash: 'dash' },
+        text: hover('median', sd.p50), hovertemplate: '%{text}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines+markers', x: sd.x.slice(0, sd.current.length), y: sd.current, name: String(sd.year),
+        line: { color: '#e8432e', width: 3 }, marker: { size: sd.current.map((_, k) => (k === sd.current.length - 1 ? 9 : 4)) },
+        text: hover(String(sd.year), sd.current), hovertemplate: '%{text}<extra></extra>',
+      },
+    ] as Partial<Plotly.Data>[];
+    const layout: Partial<Plotly.Layout> = {
+      height: 320,
+      margin: { l: 60, r: 10, t: 10, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
+      xaxis: {
+        fixedrange: true, range: [0, 365], showgrid: false,
+        tickvals: [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334].map((v) => v + 15), ticktext: MONTHS,
+      },
+      yaxis: { fixedrange: true, title: { text: 'cell-days since 1 Jan' }, rangemode: 'tozero', gridcolor: '#e5e8ec' },
+      legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom' },
+      hovermode: 'closest',
+    };
+    await Plotly.react(seasonEl, data as Plotly.Data[], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+      toImageButtonOptions: { filename: `seamless-fire-${country.code}-${areaSlug(state.area)}-season` },
+    });
+    const l = sd.last;
+    $('season-note').innerHTML = l
+      ? `By ${doyLabel(l.x)} ${sd.year}: <b>${fmt(l.value)}</b> cell-days since 1 January` +
+        (l.ratio !== null ? `, <b>${l.ratio >= 10 ? l.ratio.toFixed(0) : l.ratio.toFixed(1)}×</b> the median of ${l.nYears} earlier years` : '') +
+        ` (above ${Math.round(l.percentile)}% of them). ` +
+        (partial ? `The last point is month to date; earlier years are counted to the same day. ` : '') +
+        `Thin grey lines: single years (hover). 2022 includes the S-NPP outage (Jul–Aug); January 2012 is estimated from MODIS.`
+      : 'Not enough data for this view.';
+  }
+
   // ------------------------------------------------------------------ anomalies
 
   function renderAnomalies(h: Harmonized, fromIdx: number, toIdx: number) {
@@ -1435,23 +1610,23 @@ import Base from '../layouts/Base.astro';
     const to = monthStr(first + toIdx);
     const shape = resolveShape(state.area);
     const keep = shape ? keepFn(shape) : null;
-    const years = hotspotYears(d.model, from, to);
+    const files = hotspotFiles(d.model, from, to);
     const name = `seamless-fire_${country.code}_${areaSlug(state.area)}_${from}_${to}_hotspots.csv`;
     const job = new AbortController();
     exportJob = job;
     dlHotspots.disabled = true;
     dlCancel.hidden = false;
-    dlStatus.textContent = `Hotspots: year 0 of ${years.length}…`;
+    dlStatus.textContent = `Hotspots: file 0 of ${files.length}…`;
     try {
       const res = await exportHotspots({
-        code: country.code, years, keep, from, to, signal: job.signal,
+        code: country.code, files, keep, from, to, signal: job.signal,
         fetchText: async (path, signal) => {
           const r = await fetch(dataUrl(path), { signal });
           if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
           return r.text();
         },
         onProgress: (done, total, rows) => {
-          dlStatus.textContent = `Hotspots: year ${done} of ${total}, ${rows.toLocaleString('en-US')} rows…`;
+          dlStatus.textContent = `Hotspots: file ${done} of ${total}, ${rows.toLocaleString('en-US')} rows…`;
         },
       });
       download(name, res.csv);
@@ -1480,7 +1655,11 @@ import Base from '../layouts/Base.astro';
     const i = selAbs - first;
     let title: string;
     if (mapMode === 'month') {
-      const kind = hc.estimated[i] ? 'estimated from MODIS' : hc.preliminary[i] ? 'VIIRS, preliminary' : 'observed VIIRS';
+      const live = d.model.live as LiveInfo | undefined;
+      const kind = hc.estimated[i] ? 'estimated from MODIS'
+        : hc.partial[i] && live ? `NOAA-20, 1–${live.throughDay} so far`
+        : selAbs > monthAbs(d.model.last_complete_month) ? 'NOAA-20, near real-time'
+        : hc.preliminary[i] ? 'VIIRS, preliminary' : 'observed VIIRS';
       title = `${monthLabel(monthStr(selAbs))} · ${kind}`;
       label.textContent = monthLabel(monthStr(selAbs));
     } else if (mapMode === 'recur') {
@@ -1580,7 +1759,8 @@ import Base from '../layouts/Base.astro';
   const hotCache = new Map<string, Promise<Hotspot[]>>();
   let hotToken = 0;
 
-  function loadHotYear(code: string, year: number): Promise<Hotspot[]> {
+  /** One hotspot file: a year ("2020") or the live period ("live"). */
+  function loadHotYear(code: string, year: number | string): Promise<Hotspot[]> {
     const key = `${code}/${year}`;
     let pr = hotCache.get(key);
     if (!pr) {
@@ -1613,18 +1793,18 @@ import Base from '../layouts/Base.astro';
       return;
     }
     const ym = monthStr(selAbs);
-    const year = Math.floor(selAbs / 12);
     if (!d.model.hotspots) {
       areaMap.setHotspots(null, 'Hotspot points: too large for this site, see FIRMS');
       return;
     }
-    if (!hotspotYears(d.model, ym, ym).length) {
+    const files = hotspotFiles(d.model, ym, ym);
+    if (!files.length) {
       areaMap.setHotspots(null, 'No hotspot points for this month');
       return;
     }
     areaMap.setHotspots(null, 'Loading hotspot points…');
     try {
-      const all = await loadHotYear(country.code, year);
+      const all = (await Promise.all(files.map((f) => loadHotYear(country.code, f)))).flat();
       if (token !== hotToken) return;
       const pts = all.filter((p) => p.date.startsWith(ym));
       areaMap.setHotspots(pts, `${pts.length.toLocaleString('en-US')} hotspot detections (vegetation), click a point`);
@@ -1674,7 +1854,7 @@ import Base from '../layouts/Base.astro';
   function resizeCharts() {
     if (!plotlyPromise) return;
     plotlyPromise.then((Plotly) => {
-      for (const el of [calEl, annualEl]) {
+      for (const el of [calEl, annualEl, seasonEl]) {
         if (el.offsetParent && (el as unknown as { data?: unknown }).data) Plotly.Plots.resize(el);
       }
     });
@@ -1688,6 +1868,7 @@ import Base from '../layouts/Base.astro';
       tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
       bodies.forEach((b) => (b.hidden = b.dataset.tab !== t.dataset.tab));
       if (t.dataset.tab === 'calendar') rerenderCalendar();
+      if (t.dataset.tab === 'season') void renderSeason();
       resizeCharts();
     }));
     const left = $('panel-left');
@@ -1836,7 +2017,7 @@ import Base from '../layouts/Base.astro';
       const shape = resolveShape(state.area);
       areaMap?.show(country.code, country.bbox, shape); // move the map while the data loads
       const one = (dc: CountryData) => {
-        const nc = monthCount(dc.cells.first_month, dc.model.last_complete_month);
+        const nc = monthCount(dc.cells.first_month, seriesEnd(dc.model));
         const hcc = harmonize(monthlyTotals(dc.cells, nc), dc.model);
         const hh = shape ? harmonizeArea(monthlyTotals(dc.cells, nc, keepFn(shape)), hcc, dc.model) : hcc;
         return { d: dc, hc: hcc, h: hh };
@@ -1867,7 +2048,7 @@ import Base from '../layouts/Base.astro';
         if (id !== requestId) return; // a newer selection won
         ({ hc, h } = one(d));
       }
-      const n = monthCount(d.cells.first_month, d.model.last_complete_month);
+      const n = monthCount(d.cells.first_month, seriesEnd(d.model));
 
       // Period: clamp to the data; full period is not written to the link.
       const firstAbs = monthAbs(d.cells.first_month);
@@ -1894,6 +2075,8 @@ import Base from '../layouts/Base.astro';
       await renderCalendar(country, d, hv, fromIdx, toIdx);
       if (id !== requestId) return;
       await renderAnnual(country, d, hv, fromIdx, toIdx);
+      if (id !== requestId) return;
+      await renderSeason();
       if (id !== requestId) return;
       status.textContent = '';
       console.info(`[seamless-fire] ${country.code}: first chart ${(performance.now() - t0).toFixed(0)} ms after select`);

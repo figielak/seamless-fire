@@ -2,6 +2,8 @@
 // Port of pipeline/model.py:harmonized_monthly (country) and pipeline/area.py:area_series
 // (custom area). Pure functions (no import.meta.env), so the same code runs in Node tests.
 
+import type { LiveInfo } from './live.ts';
+
 export interface Cells {
   first_month: string; // "YYYY-MM", month index 0
   cell_deg: number; // grid step in degrees
@@ -33,6 +35,7 @@ export interface Model {
   low_quality: string[];
   preliminary?: string[]; // months with near real-time data
   last_complete_month: string;
+  live?: LiveInfo; // near real-time period after last_complete_month (added in the browser, live.ts)
   last_data: Record<string, string>;
   coverage?: Record<string, [string, string]>; // satellite -> [first, last] date in the raw files
   hotspots?: boolean; // {CC}/hotspots/{year}.csv exist (not for AU, CA)
@@ -71,6 +74,7 @@ export interface Harmonized {
   terraOnly: boolean[];
   lowQuality: boolean[];
   preliminary: boolean[];
+  partial: boolean[]; // month to date (the current live month is not complete yet)
   area: boolean; // custom area (country share before VIIRS), not the whole country
   raw?: boolean; // naive splice (raw MODIS, then raw VIIRS), for display only
 }
@@ -131,6 +135,7 @@ export function harmonize(s: Series, model: Model): Harmonized {
   const viirsFirst = monthAbs(model.viirs_first_month);
   const lowQ = new Set(model.low_quality);
   const prelim = new Set(model.preliminary ?? []);
+  const partialMonth = model.live?.partialMonth ?? null;
   const kModel = Math.exp(model.interval_z * model.sigma);
   const sTerra = Math.hypot(model.sigma, model.b * model.terra_only.sigma);
   const kTerra = Math.exp(model.interval_z * sTerra);
@@ -147,6 +152,7 @@ export function harmonize(s: Series, model: Model): Harmonized {
     terraOnly: new Array(n),
     lowQuality: new Array(n),
     preliminary: new Array(n),
+    partial: new Array(n),
     area: false,
   };
   for (let i = 0; i < n; i++) {
@@ -171,6 +177,7 @@ export function harmonize(s: Series, model: Model): Harmonized {
     out.terraOnly[i] = terra;
     out.lowQuality[i] = lowQ.has(ym);
     out.preliminary[i] = prelim.has(ym);
+    out.partial[i] = ym === partialMonth;
   }
   return out;
 }

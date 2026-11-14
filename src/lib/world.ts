@@ -2,6 +2,7 @@
 // results are summed (never one model over pooled raw counts). Pure functions.
 
 import { annualTotals, type Harmonized, type Model, type YearTotal } from './harmonize.ts';
+import { seriesEnd } from './live.ts';
 import type { CellLayer } from './cellmap.ts';
 
 export const WORLD_CODE = 'ALL';
@@ -24,7 +25,7 @@ export function sumSeries(parts: Harmonized[]): Harmonized {
     for (const p of parts) for (let i = 0; i < n; i++) out[i] += p[key][i];
     return out;
   };
-  const any = (key: 'estimated' | 'terraOnly' | 'lowQuality' | 'preliminary') =>
+  const any = (key: 'estimated' | 'terraOnly' | 'lowQuality' | 'preliminary' | 'partial') =>
     Array.from({ length: n }, (_, i) => parts.some((p) => p[key][i]));
   const out: Harmonized = {
     firstMonth: parts[0].firstMonth,
@@ -37,6 +38,7 @@ export function sumSeries(parts: Harmonized[]): Harmonized {
     terraOnly: any('terraOnly'),
     lowQuality: any('lowQuality'),
     preliminary: any('preliminary'),
+    partial: any('partial'),
     area: parts.some((p) => p.area),
   };
   if (parts.every((p) => p.viirsDet)) {
@@ -77,7 +79,7 @@ export function worldModel(models: Model[]): Model {
     }
   }
   const firsts = new Set(models.map((m) => m.viirs_first_month));
-  const lasts = new Set(models.map((m) => m.last_complete_month));
+  const lasts = new Set(models.map((m) => `${m.last_complete_month}/${seriesEnd(m)}`));
   if (firsts.size !== 1 || lasts.size !== 1) throw new Error('countries differ in VIIRS start or data end');
   return {
     ...base,

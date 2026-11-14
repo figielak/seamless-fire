@@ -125,6 +125,7 @@ export interface Anomaly extends MonthStats {
 export function topAnomalies(h: Harmonized, fromIdx = 0, toIdx = h.value.length - 1, n = 10): Anomaly[] {
   const out: Anomaly[] = [];
   for (let i = Math.max(fromIdx, 0); i <= Math.min(toIdx, h.value.length - 1); i++) {
+    if (h.partial?.[i]) continue; // month to date: not comparable with full months
     const s = monthStats(h, i);
     if (s.ratio === null) continue;
     out.push({ ...s, idx: i, estimated: h.estimated[i], lowQuality: h.lowQuality[i], preliminary: h.preliminary[i] });
