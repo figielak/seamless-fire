@@ -34,6 +34,10 @@ pixels and detects several times more fire, so joining the two records naively m
   whole period and for the VIIRS years alone, and for each calendar month (e.g. April burning declines).
 - **Top 10 anomalies**: months most above their usual level.
 - **Raw / harmonized toggle**: shows the false 2012 jump and how the harmonized series removes it.
+- **Area report**: one HTML file for the selected area and period (opens offline, prints to PDF): summary in
+  sentences, calendar, fire season profile, yearly totals with trend, most unusual months, and the ~1 km places
+  where fire comes back most often in the main fire months (with coordinates and map links; year-round industrial
+  spots listed separately).
 - **CSV export**: the monthly series, plus the hotspots inside the area and period (hotspot files for
   Poland, Portugal, Spain, Greece, Ukraine and Chile; for Australia and Canada they are too large, so the
   site links to FIRMS).

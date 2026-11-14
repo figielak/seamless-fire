@@ -93,6 +93,7 @@ import Base from '../layouts/Base.astro';
 
         <details class="sec">
           <summary>Download</summary>
+          <button type="button" id="dl-report" class="primary-dl" title="One HTML file: summary, calendar, season, trend, unusual months and places where fire comes back. Opens in any browser; print it to PDF.">Area report (HTML)</button>
           <div class="row">
             <button type="button" id="dl-monthly">Monthly series (CSV)</button>
             <button type="button" id="dl-hotspots">Hotspots (CSV)</button>
@@ -411,6 +412,11 @@ import Base from '../layouts/Base.astro';
   }
   button.wide {
     width: 100%;
+  }
+  .primary-dl {
+    width: 100%;
+    margin: 0 0 0.5rem;
+    font-weight: 600;
   }
   .panel-body .note:empty {
     display: none;
@@ -1007,6 +1013,7 @@ import Base from '../layouts/Base.astro';
     cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
   } from '../lib/cellmap';
   import type { Hotspot } from '../lib/map';
+  import { monthProfile, placeMonths, placesInArea, reportHtml, type Places } from '../lib/report';
   import { WORLD_CODE, mergeLayers, sumAnnual, sumSeries, unionBBox, worldModel } from '../lib/world';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1057,6 +1064,7 @@ import Base from '../layouts/Base.astro';
   const toY = $<HTMLSelectElement>('to-y');
   const dlMonthly = $<HTMLButtonElement>('dl-monthly');
   const dlHotspots = $<HTMLButtonElement>('dl-hotspots');
+  const dlReport = $<HTMLButtonElement>('dl-report');
   const dlCancel = $<HTMLButtonElement>('dl-cancel');
   const dlStatus = $('dl-status');
   const dlNote = $('dl-note');
@@ -1656,8 +1664,8 @@ import Base from '../layouts/Base.astro';
 
   // ------------------------------------------------------------------ export
 
-  function download(name: string, text: string) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  function download(name: string, text: string, type = 'text/csv;charset=utf-8') {
+    const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
@@ -1665,6 +1673,97 @@ import Base from '../layouts/Base.astro';
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /** How the area of the report is defined (one sentence). */
+  function areaNoteText(country: Country): string {
+    const a = state.area;
+    const f = (v: number) => v.toFixed(3);
+    if (country.code === WORLD_CODE) return 'Area: all eight countries, each harmonized with its own model, then summed.';
+    if (a.kind === 'country') return `Area: ${country.name}, whole country (FIRMS country files; near real-time points assigned with Natural Earth borders).`;
+    if (a.kind === 'preset') {
+      const p = PRESETS.find((x) => x.id === a.id);
+      return `Area: preset "${p?.name ?? a.id}"${p?.note ? ` (${p.note})` : ''}, in ${country.name}.`;
+    }
+    const [w, s, e, n] = shapeBBox(a.shape);
+    return a.shape.kind === 'rect'
+      ? `Area: rectangle W ${f(w)}, S ${f(s)}, E ${f(e)}, N ${f(n)} (degrees), in ${country.name}.`
+      : `Area: polygon with ${a.shape.ring.length} vertices drawn on the map (bounding box W ${f(w)}, S ${f(s)}, E ${f(e)}, N ${f(n)}), in ${country.name}.`;
+  }
+
+  let reportBusy = false;
+
+  async function startReport() {
+    if (!current || reportBusy) return;
+    reportBusy = true;
+    dlReport.disabled = true;
+    dlStatus.textContent = 'Preparing the area report…';
+    try {
+      const { country, d, h, fromIdx, toIdx, parts } = current;
+      const world = country.code === WORLD_CODE;
+      const first = monthAbs(h.firstMonth);
+      const shape = world ? null : resolveShape(state.area);
+      const label = areaLabel(state.area);
+      const annual = parts
+        ? sumAnnual(parts.map((p) => ({ h: p.h, model: p.d.model })), fromIdx, toIdx)
+        : annualTotals(h, d.model, fromIdx, toIdx);
+      // Month to date and season to date: same days of earlier years from the daily history.
+      const info = d.model.live as LiveInfo | undefined;
+      const idx = h.value.length - 1;
+      let mtd = null;
+      let partial: { day: number; hist: Map<number, number> } | null = null;
+      if (h.partial[idx] && info) {
+        try {
+          const { hist, days } = await sameDaysTotals(d, info);
+          mtd = mtdStats(h.value[idx], hist, info, d.model, days.size, monthStats(h, idx).k);
+          partial = { day: info.throughDay, hist };
+        } catch (err) {
+          console.error(err); // the report still has the full months
+        }
+      }
+      const hs = partial || !h.partial[idx] ? h : { ...h, value: h.value.slice(0, idx), partial: h.partial.slice(0, idx) };
+      const season = seasonData(hs, seasonYears(h, d.model.viirs_first_month), partial);
+      // Places where fire comes back: recurrence files of the main fire months (one country only).
+      let places: Places | null = null;
+      if (!world) {
+        const months = placeMonths(monthProfile(h, fromIdx, toIdx));
+        if (months.length) {
+          try {
+            const meta = await loadRec<RecurrenceMeta>(`${country.code}/recurrence/meta.json`);
+            const data = await Promise.all(months.map((c) =>
+              loadRec<RecurrenceMonth>(`${country.code}/recurrence/m${String(c + 1).padStart(2, '0')}.json`)));
+            places = placesInArea(meta, months.map((cal, k) => ({ cal, data: data[k] })), shape ? keepFn(shape) : null);
+          } catch (err) {
+            console.error(err); // report without the places section
+          }
+        }
+      }
+      const now = new Date().toISOString();
+      const html = reportHtml({
+        title: `${label ? `${label}, ` : ''}${country.name}`,
+        areaNote: areaNoteText(country),
+        shape,
+        isArea: h.area,
+        h, model: d.model, fromIdx, toIdx, annual, mtd, season, places,
+        appUrl: location.href.split('#')[0] + serializeHash({ ...state, view: undefined }),
+        generated: `${now.slice(0, 10)} ${now.slice(11, 16)}`,
+        dataThrough: info?.last ?? String((d.model.last_data as Record<string, string> | undefined)?.SNPP ?? d.model.last_complete_month),
+        modelNote: world
+          ? 'each country with its own model'
+          : `${country.name}: model ${d.model.model === 'E' ? 'with seasonal intercepts' : 'with one intercept'}, b = ${d.model.b.toFixed(3)}`,
+      });
+      download(
+        `seamless-fire_${country.code}_${areaSlug(state.area)}_${monthStr(first + fromIdx)}_${monthStr(first + toIdx)}_report.html`,
+        html, 'text/html;charset=utf-8',
+      );
+      dlStatus.textContent = 'Area report saved. Open it in a browser; print it to save a PDF.';
+    } catch (err) {
+      console.error(err);
+      dlStatus.textContent = 'The area report could not be made. Try again.';
+    } finally {
+      reportBusy = false;
+      dlReport.disabled = false;
+    }
   }
 
   function updateExportNote() {
@@ -2326,6 +2425,7 @@ import Base from '../layouts/Base.astro';
       );
     });
     dlHotspots.addEventListener('click', startHotspotExport);
+    dlReport.addEventListener('click', () => void startReport());
     dlCancel.addEventListener('click', () => exportJob?.abort());
     window.addEventListener('hashchange', applyHash);
     initPanels();

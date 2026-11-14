@@ -191,6 +191,12 @@ Trends (`src/lib/trend.ts`, "Per year" tab): Theil–Sen on log1p annual totals 
 selected period (year 2000 dropped: 10 low-quality months), full period vs VIIRS-only, per calendar month; always on
 harmonized values. Results: `docs/validation.md` §14.
 
+Area report (`src/lib/report.ts`, button "Area report (HTML)" in Download): one self-contained HTML file (inline CSS and
+SVG, no scripts), built in the browser from the current view: summary lines, calendar, monthly profile (complete years of
+the period; main fire months = fewest months holding 70% of the year), annual totals + trends, top 10 anomalies, and for
+the 3 largest months the most recurrent 0.01° cells inside the area (year-round cells excluded, listed separately).
+No places section in "All countries".
+
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 - GitHub: `figielak/seamless-fire` (remote `origin`, SSH), site https://figielak.github.io/seamless-fire/. `site`/`base` come from env `SITE`/`BASE`, set by `.github/workflows/deploy.yml` from `configure-pages`
