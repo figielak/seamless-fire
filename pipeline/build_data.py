@@ -24,7 +24,7 @@ import pandas as pd
 
 from model import build_models
 from config import (
-    CACHE_DIR, COUNTRIES, ENCODING, FILENAME_MAP, FIRST_MONTH, HIST_LAST_YEAR, HOTSPOT_COUNTRIES,
+    CACHE_DIR, COUNTRIES, ENCODING, LIVE_DIR, FILENAME_MAP, FIRST_MONTH, HIST_LAST_YEAR, HOTSPOT_COUNTRIES,
     INDUSTRIAL_MASK_MIN_SHARE, INDUSTRIAL_MASK_YEARS, LAST_COMPLETE_MONTH, OUT_DIR, RAW_DIR,
     RECURRENCE_DEG, RECURRENCE_FIRST_MONTH, RECURRENCE_MIN_YEARS, SATELLITE_NAMES, SATELLITE_SENSOR,
     SNPP_OUTAGE, YEAR_ROUND_MIN_CAL_MONTHS, YEAR_ROUND_MIN_SHARE,
@@ -247,6 +247,7 @@ def build_country(code: str) -> dict:
     results = [(f, process_file(f, hotspots=want_hs)) for f in hist]
     counts = pd.concat([r.industrial for _, r in results], ignore_index=True)
     mask = build_mask(counts, INDUSTRIAL_MASK_MIN_SHARE)
+    write_mask(code, mask)
 
     # Phase 2: newer files with the frozen mask (and the rejected "any type 2" rule for comparison).
     eval_masks = {"majority": mask, "any": build_mask(counts, 0.0)}
@@ -364,6 +365,15 @@ def write_cells_json(code: str, celldays: pd.DataFrame, detections: pd.DataFrame
     path.write_text(json.dumps(out, separators=(",", ":")))
     print(f"  {path.relative_to(OUT_DIR.parent.parent)}: {len(counts):,} rows, "
           f"{path.stat().st_size / 1e6:.2f} MB")
+
+
+def write_mask(code: str, mask: np.ndarray) -> None:
+    """live/masks/{CC}.json: frozen industrial mask (0.01° cell keys, see mask_keys) for the
+    daily near real-time update, which has no raw data to rebuild it."""
+    path = LIVE_DIR / "masks" / f"{code}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"deg": 0.01, "keys": [int(k) for k in mask]}, separators=(",", ":")),
+                    encoding=ENCODING)
 
 
 def write_recurrence(code: str, fine: pd.DataFrame) -> None:

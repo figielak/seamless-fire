@@ -32,9 +32,11 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. Final live check done 2026-11-14 (all 8 countries + All, presets, events, CSV exports, Method page).
-   Remaining for the user: Space Apps submission form (docs/plan.md §6) and the 7-slide demo.
-   Demo tip: open "All countries" (and AU) before presenting; cold load measured 26 s (AU cells.json 23.8 MB).
+Daily NRT updates ("present" = today), stages A–D agreed with the user 2026-11-14 (deadline not binding):
+- A done (uncommitted): `pipeline/borders.py` → `live/borders.json`, masks → `live/masks/`, `pipeline/live_base.py`
+  → `public/data/{CC}/daily/` + `live/nrt/`, `live/coverage.json` (seed NOAA-20 1–12 Nov 2026).
+- B next: `pipeline/live_update.py` (global NOAA-20 7d file → borders, mask, dedupe → live/nrt, `{CC}/live.json`).
+- C: site (month to date, "Now" vs same days 2012–2025, "This season" tab). D: GitHub Actions daily cron.
 
 ## Blockers / open questions
 

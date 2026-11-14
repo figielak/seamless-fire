@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT / "data"  # data/{Country name}/{MODIS,VIIRS-SNPP,VIIRS-JPSS1,FIRMS_2026}/
 OUT_DIR = ROOT / "public" / "data"
 CACHE_DIR = ROOT / "pipeline" / "cache"  # intermediate cell-day tables (gitignored)
+LIVE_DIR = ROOT / "live"  # committed inputs of the daily near real-time update (pipeline/live_update.py)
+BORDERS_FILE = LIVE_DIR / "borders.json"  # pipeline/borders.py, Natural Earth 1:10m
 
 FIRST_MONTH = "2000-01"   # month index 0 in cells.json
 HIST_LAST_YEAR = 2025       # frozen end of the historical period (mask, filter stats, calibration)

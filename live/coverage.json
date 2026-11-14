@@ -1,0 +1,74 @@
+{
+ "PL": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "PT": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "ES": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "GR": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "UA": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "AU": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "CA": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ },
+ "CL": {
+  "sensor": "N20",
+  "first": "2026-11-01",
+  "last": "2026-11-12",
+  "gaps": [],
+  "sources": [
+   "FIRMS country file (local seed)"
+  ]
+ }
+}
