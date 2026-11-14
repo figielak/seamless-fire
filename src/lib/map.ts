@@ -302,7 +302,7 @@ export class AreaMap {
         <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
           `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
           <span style="left:100%">${max}+</span></div>
-        <div class="lg-unit">${unit}. Same scale for all countries.</div>
+        <div class="lg-unit">${unit}.</div>
         <div class="lg-mode">${[['1', 'Smooth'], ['0', 'Cells']].map(([v, label]) =>
           `<button type="button" data-smooth="${v}" aria-pressed="${(v === '1') === this.cells.smooth}">${label}</button>`).join('')}
           <span>${this.cells.smooth ? 'colours blended between cell centres' : 'one square per 0.1° cell'}</span></div>
