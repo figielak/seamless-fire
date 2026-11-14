@@ -39,17 +39,58 @@ export function fireColor(t: number): string {
 /** Log colour position of a value: log1p(v) / log1p(max). */
 export const fireT = (v: number, max: number) => (max > 0 ? Math.log1p(v) / Math.log1p(max) : 0);
 
-/** Canvas layer with one rectangle per 0.1° cell, redrawn after each move or zoom. */
+const LUT_SIZE = 256;
+const FIRE_LUT: Uint8Array = (() => {
+  const lut = new Uint8Array(LUT_SIZE * 3);
+  for (let i = 0; i < LUT_SIZE; i++) {
+    const [r, g, b] = fireColor(i / (LUT_SIZE - 1)).match(/\d+/g)!.map(Number);
+    lut.set([r, g, b], i * 3);
+  }
+  return lut;
+})();
+
+/** Smooth rendering needs cells at least this many screen pixels wide; below it, rectangles. */
+const SMOOTH_MIN_PX = 3;
+
+/**
+ * Canvas layer for the fire cells, redrawn after each move or zoom.
+ * "smooth": colours interpolated bilinearly between cell centres (each centre keeps its exact
+ * colour; opacity fades towards empty cells). "cells": one flat rectangle per 0.1° cell.
+ */
 class CellCanvas extends L.Layer {
   private canvas = L.DomUtil.create('canvas', 'cell-canvas') as HTMLCanvasElement;
   private data: CellLayer | null = null;
   private colors: string[] = [];
+  // Dense grid for smooth mode: q = 0 empty, 1..255 = colour position t (log scale).
+  private grid: { q: Uint8Array; lat0: number; lon0: number; rows: number; cols: number } | null = null;
+  smooth = true;
 
   /** Colours on a fixed scale [0, max] (same for every country); larger values get the top colour. */
   setData(data: CellLayer | null, max: number) {
     this.data = data;
     this.colors = [];
-    if (data) for (let j = 0; j < data.value.length; j++) this.colors.push(fireColor(fireT(data.value[j], max)));
+    this.grid = null;
+    if (data && data.value.length) {
+      let [la0, la1, lo0, lo1] = [Infinity, -Infinity, Infinity, -Infinity];
+      for (let j = 0; j < data.value.length; j++) {
+        this.colors.push(fireColor(fireT(data.value[j], max)));
+        la0 = Math.min(la0, data.lat[j]); la1 = Math.max(la1, data.lat[j]);
+        lo0 = Math.min(lo0, data.lon[j]); lo1 = Math.max(lo1, data.lon[j]);
+      }
+      const rows = la1 - la0 + 1;
+      const cols = lo1 - lo0 + 1;
+      const q = new Uint8Array(rows * cols);
+      for (let j = 0; j < data.value.length; j++) {
+        const t = Math.min(Math.max(fireT(data.value[j], max), 0), 1);
+        q[(data.lat[j] - la0) * cols + (data.lon[j] - lo0)] = 1 + Math.round(t * 254);
+      }
+      this.grid = { q, lat0: la0, lon0: lo0, rows, cols };
+    }
+    if (this._map) this.redraw();
+  }
+
+  setSmooth(on: boolean) {
+    this.smooth = on;
     if (this._map) this.redraw();
   }
 
@@ -79,13 +120,23 @@ class CellCanvas extends L.Layer {
     const map = this._map;
     if (!map) return;
     const size = map.getSize();
-    const dpr = window.devicePixelRatio || 1;
     L.DomUtil.setPosition(this.canvas, map.containerPointToLayerPoint([0, 0]));
-    this.canvas.width = size.x * dpr;
-    this.canvas.height = size.y * dpr;
     this.canvas.style.width = `${size.x}px`;
     this.canvas.style.height = `${size.y}px`;
     this.canvas.style.visibility = '';
+    const d = this.data;
+    const c = map.getCenter();
+    const cellPx = d
+      ? map.latLngToContainerPoint([c.lat, c.lng + d.cellDeg]).x - map.latLngToContainerPoint(c).x
+      : 0;
+    if (d && this.grid && this.smooth && cellPx >= SMOOTH_MIN_PX) this.drawSmooth(map, size, d.cellDeg);
+    else this.drawCells(map, size);
+  }
+
+  private drawCells(map: L.Map, size: L.Point) {
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = size.x * dpr;
+    this.canvas.height = size.y * dpr;
     const ctx = this.canvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.x, size.y);
@@ -103,6 +154,52 @@ class CellCanvas extends L.Layer {
       ctx.fillStyle = this.colors[j];
       ctx.fillRect(p1.x, p1.y, Math.max(p2.x - p1.x, 1.5), Math.max(p2.y - p1.y, 1.5));
     }
+  }
+
+  /** Bilinear interpolation per screen pixel (CSS pixels; the canvas is scaled up for HiDPI). */
+  private drawSmooth(map: L.Map, size: L.Point, deg: number) {
+    const W = size.x;
+    const H = size.y;
+    this.canvas.width = W;
+    this.canvas.height = H;
+    const ctx = this.canvas.getContext('2d')!;
+    const img = ctx.createImageData(W, H);
+    const px = img.data;
+    const { q, lat0, lon0, rows, cols } = this.grid!;
+    // Fractional grid position relative to cell centres; Mercator: lon depends on x only, lat on y only.
+    const gx = new Float64Array(W);
+    for (let x = 0; x < W; x++) gx[x] = map.containerPointToLatLng([x + 0.5, 0]).lng / deg - 0.5 - lon0;
+    const gy = new Float64Array(H);
+    for (let y = 0; y < H; y++) gy[y] = map.containerPointToLatLng([0, y + 0.5]).lat / deg - 0.5 - lat0;
+    const at = (r: number, k: number) => (r < 0 || r >= rows || k < 0 || k >= cols ? 0 : q[r * cols + k]);
+    for (let y = 0; y < H; y++) {
+      const fy0 = gy[y];
+      if (fy0 < -1 || fy0 > rows) continue;
+      const r0 = Math.floor(fy0);
+      const fy = fy0 - r0;
+      for (let x = 0; x < W; x++) {
+        const fx0 = gx[x];
+        if (fx0 < -1 || fx0 > cols) continue;
+        const k0 = Math.floor(fx0);
+        const fx = fx0 - k0;
+        const a = at(r0, k0), b = at(r0, k0 + 1), cc = at(r0 + 1, k0), dd = at(r0 + 1, k0 + 1);
+        if ((a | b | cc | dd) === 0) continue;
+        const wa = (1 - fx) * (1 - fy), wb = fx * (1 - fy), wc = (1 - fx) * fy, wd = fx * fy;
+        let wm = 0, tq = 0;
+        if (a) { wm += wa; tq += wa * a; }
+        if (b) { wm += wb; tq += wb * b; }
+        if (cc) { wm += wc; tq += wc * cc; }
+        if (dd) { wm += wd; tq += wd * dd; }
+        if (wm <= 0) continue;
+        const li = Math.round(((tq / wm - 1) / 254) * (LUT_SIZE - 1)) * 3;
+        const o = (y * W + x) * 4;
+        px[o] = FIRE_LUT[li];
+        px[o + 1] = FIRE_LUT[li + 1];
+        px[o + 2] = FIRE_LUT[li + 2];
+        px[o + 3] = Math.round(Math.min(wm * 1.6, 1) * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
   }
 }
 
@@ -148,6 +245,12 @@ export class AreaMap {
     const legendCtl = new Legend({ position: 'bottomleft' });
     legendCtl.addTo(this.map);
     this.legend = legendCtl.getContainer()!;
+    this.legend.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-smooth]');
+      if (!btn) return;
+      this.cells.setSmooth(btn.dataset.smooth === '1');
+      this.hover(null);
+    });
     this.map.on('mousemove', (e: L.LeafletMouseEvent) => this.hover(e.latlng));
     this.map.on('mouseout', () => this.hover(null));
 
@@ -185,6 +288,9 @@ export class AreaMap {
           `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
           <span style="left:100%">${max}+</span></div>
         <div class="lg-unit">${unit}; same scale for all countries</div>
+        <div class="lg-mode">${[['1', 'Smooth'], ['0', 'Cells']].map(([v, label]) =>
+          `<button type="button" data-smooth="${v}" aria-pressed="${(v === '1') === this.cells.smooth}">${label}</button>`).join('')}
+          <span>${this.cells.smooth ? 'colours blended between cell centres' : 'one square per 0.1° cell'}</span></div>
         <div class="lg-cell">${empty ? 'No fire cells in this selection' : cell}</div>`;
   }
 
