@@ -5,6 +5,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT / "data"  # data/{Country name}/{MODIS,VIIRS-SNPP,VIIRS-JPSS1,FIRMS_2026}/
 OUT_DIR = ROOT / "public" / "data"
+CACHE_DIR = ROOT / "pipeline" / "cache"  # intermediate cell-day tables (gitignored)
+
+FIRST_MONTH = "2000-01"   # month index 0 in cells.json
+LAST_YEAR_STAGE1 = 2025   # 2026 files (NRT rows without `type`) are handled in stage 4
 
 ENCODING = "utf-8"
 
@@ -26,12 +30,16 @@ SNPP_LAST_DATE = "2026-11-02"  # after this date VIIRS series = NOAA-20 x factor
 
 SENSORS = ("MODIS", "SNPP", "N20")
 
-# `satellite` column value -> sensor
-SATELLITE_MAP = {
-    "Terra": "MODIS", "Aqua": "MODIS", "T": "MODIS", "A": "MODIS",
+# `satellite` column value -> normalized satellite name
+SATELLITE_NAMES = {
+    "Terra": "Terra", "T": "Terra",
+    "Aqua": "Aqua", "A": "Aqua",
     "N": "SNPP", "SNPP": "SNPP", "NPP": "SNPP",
     "N20": "N20", "J1": "N20", "NOAA-20": "N20",
 }
+
+# normalized satellite -> sensor
+SATELLITE_SENSOR = {"Terra": "MODIS", "Aqua": "MODIS", "SNPP": "SNPP", "N20": "N20"}
 
 # Fallback: file name fragment -> sensor
 FILENAME_MAP = {

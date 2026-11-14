@@ -7,22 +7,23 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **1 (pipeline: load, filter, cell-days)**, not started
-- Scaffold exists: Astro (`src/pages/index.astro`, `method.astro`, `lib/data.ts`), `pipeline/build_data.py` (only lists files), `config.py`, deploy workflow
-- `public/data/` is empty
-- Git: scaffold + `.planning` pushed to `origin/main`; deploy run / live site not verified yet
-- Raw data present for PL, PT, ES, GR, UA, AU (52 CSV each); `data/` tidied (empty `firms_*` removed, single `AttributesReadme.txt`)
+- Stage: **1 done** (not committed yet), next: **2 (validation A–E, model.json)**
+- `pipeline/build_data.py` writes `countries.json`, `{CC}/cells.json` (columnar: lat, lon, m = months since 2000-01, modis, viirs) and cache `pipeline/cache/{CC}_celldays.parquet` (sat, lat_i, lon_i, date) + `{CC}_filter_stats.json`
+- `pipeline/sanity.py` prints sanity numbers from the cache
+- Built: PL, PT (years ≤ 2025; 2026 files skipped until stage 4). cells.json ~0.35 MB each
+- Deploy run / live site not verified yet (`gh` not installed)
 
 ## Next step
 
-1. Stage 1 in `pipeline/build_data.py`, check sanity numbers for PL, PT (see CLAUDE.md)
+1. Stage 2: validation A–E (LOYO + backtest), D vs E, sigma, NOAA-20 factor, Terra-only ratio, spatial agreement -> `model.json`
 2. Confirm the deploy workflow run is green and https://figielak.github.io/seamless-fire/ loads
 
 ## Blockers / open questions
 
 - D vs E: which wins validation? (stage 2)
 - PT backtest systematic underestimate: cause unknown
+- LOYO sanity numbers in CLAUDE.md may also be detection-based (see DECISIONS); compare trends, not exact values
 
 ## Done
 
-(stage, one line each, with key result)
+- Stage 1: cell-days PL/PT, corr 0.92/0.95, cell-day ratio 3.5/1.9, totals in cells.json match cache
