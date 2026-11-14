@@ -51,6 +51,7 @@ Hosting: GitHub Pages via GitHub Actions.
 Commands:
 - `python pipeline/build_data.py` – rebuild `public/data/`
 - `npm run dev` / `npm run build` / `npm run preview`
+- `npm run test:site` – TS harmonization vs Python reference (`python pipeline/site_fixture.py` rewrites `src/lib/fixtures/`)
 
 ## Method (decided)
 
@@ -88,7 +89,7 @@ Commands:
 |---|---|
 | `countries.json` | `[{code, name, bbox: [W, S, E, N]}]` |
 | `{CC}/cells.json` | rows: lat index, lon index (0.1°), month, MODIS cell-days, VIIRS cell-days (S-NPP scale) |
-| `{CC}/model.json` | `a[4]`, `b`, sigma, NOAA-20 factor, method comparison, filtered industrial share, last data date |
+| `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share, last data date, `last_complete_month` (end of coverage, drives the "Now" panel) |
 | `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor, frp (for CSV export) |
 
 Keep files small: compact arrays, no pretty printing. Check size before committing

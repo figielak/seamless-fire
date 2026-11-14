@@ -252,7 +252,7 @@ def harmonized_monthly(ms: pd.DataFrame, a: list, b: float, terra: dict) -> pd.D
     model on MODIS before (Terra-only months scaled first)."""
     first = viirs_first_month(ms)
     season = np.array([SEASON_OF_MONTH[m] for m in ms.index.month])
-    m_eff = ms["MODIS"].to_numpy(float)
+    m_eff = np.array(ms["MODIS"], dtype=float)  # copy: to_numpy may return a read-only view
     terra_only_mask = ms.index <= pd.Period(terra["until"], "M")
     m_eff[terra_only_mask] = np.array(terra["ratio"])[season[terra_only_mask]] * ms["Terra"].to_numpy()[terra_only_mask]
     model = np.maximum(np.expm1(np.array(a)[season] + b * np.log1p(m_eff)), 0)
@@ -343,10 +343,17 @@ def build_models(codes: list[str]) -> dict:
             "annual": annual_series(hm, sigma_annual, p["b"], terra["sigma"]),
             "low_quality": LOW_QUALITY, "calib_excluded": CALIB_EXCLUDE,
             "last_data": {k: str(v.date()) for k, v in last.items()},
+            # End of data coverage (not the last detection date); stage 4 moves it into 2026.
+            "last_complete_month": f"{LAST_YEAR_STAGE1}-12",
         }
+        out = rnd(model)
+        # Parameters the site computes with keep full precision (rounded ones shift sums).
+        for k in ("a", "b", "sigma", "sigma_annual", "interval_z"):
+            out[k] = model[k]
+        out["terra_only"] = terra
         path = OUT_DIR / code / "model.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(rnd(model), separators=(",", ":")), encoding="utf-8")
+        path.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
         print(f"  {code} model {variant} ({source}), a={rnd(p['a'], 3)}, b={p['b']:.3f}, "
               f"sigma={sigma:.3f}, model.json {path.stat().st_size / 1e3:.1f} kB")
         results[code] = model

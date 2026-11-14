@@ -7,22 +7,24 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **2 done** (not committed yet), next: **3 (site minimum + deploy)**
-- `pipeline/build_data.py` writes `countries.json`, `{CC}/cells.json` (columnar: lat, lon, m = months since 2000-01, modis, viirs) and cache `pipeline/cache/{CC}_celldays.parquet` (sat, lat_i, lon_i, date) + `{CC}_filter_stats.json`
-- `pipeline/model.py` (stage 2) writes `{CC}/model.json`: model D/E, a[4], b, sigma, sigma_annual, n20_factor, terra_only, methods A–E (+D+s, E+s), agreement, industrial_share, annual series, flags. `build_data.py --model-only` skips stage 1
-- `pipeline/sanity.py` prints sanity numbers from the cache and model.json
-- Built: all 8 countries (incl. CA, CL); 2026 raw files present for all, used from stage 4 (years ≤ 2025; 2026 files skipped until stage 4). cells.json PL/PT/GR/ES < 1.1 MB, UA 5.7 MB, CA 4.5 MB, CL 1.4 MB, AU 20.4 MB (too big, see DECISIONS)
-- Tests: `python -m unittest discover -s pipeline/tests` (12 tests); cross-country table: `python pipeline/sanity.py --summary`
-- Deploy run / live site not verified yet (`gh` not installed)
+- Stage: **3 implementation ready, deploy pending** (stage 3 counts as done only after the live test)
+- Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
+  `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
+  and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
+- Pipeline: stages 1–2 done for 8 countries; model.json now has full-precision params + `last_complete_month`
+- Tests: `python -m unittest discover -s pipeline/tests` (12), `npm run test:site`, `npm run check`
 
 ## Next step
 
-1. Stage 3: site minimum (country select, calendar, "Now" panel) from cells.json + model.json; deploy to GitHub Pages and verify the live URL
-2. After stage 3: EFFIS independent check 2000–2011 (CLAUDE.md work order 3b)
+1. Push to `main` (user OK), confirm Pages source = GitHub Actions, check the workflow run for the commit
+2. Live test https://figielak.github.io/seamless-fire/ (fresh browser): new UI, PL/PT/AU, no console errors,
+   gzip on AU cells.json, AU timings → DECISIONS.md, then mark stage 3 done
+3. Then 3b: EFFIS independent check 2000–2011
 
 ## Blockers / open questions
 
-- AU/UA cells.json size for the browser
+- AU cells.json: kept as JSON, live timing still to confirm
+- Stage 5 method question: model intercept gives ~4–20 cell-days/month for empty small areas before 2012 (see DECISIONS)
 
 - PT backtest systematic underestimate (−26%, every year): not smearing; likely drift between 2012–18 and 2019–25. Mention as limitation
 

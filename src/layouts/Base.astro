@@ -13,9 +13,11 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Harmonized MODIS + VIIRS burning activity calendar, 2000 to today." />
     <title>{title}</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2300224e'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%23fee838'/%3E%3Crect x='9' y='9' width='4' height='4' fill='%23e8432e'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <header>
+    <header class="site">
+      <a class="brand" href={base}>Seamless Fire</a>
       <nav>
         <a href={base}>Calendar</a>
         <a href={`${base}method/`}>Method</a>
@@ -25,7 +27,188 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
       <slot />
     </main>
     <footer>
-      <p>Data: NASA FIRMS (MODIS, VIIRS). Code: Apache 2.0.</p>
+      <p>
+        Data: NASA FIRMS active fire products (MODIS Collection 6, VIIRS 375 m from S-NPP and NOAA-20).
+        Code: Apache 2.0.
+      </p>
     </footer>
   </body>
 </html>
+
+<style is:global>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --text: #24292f;
+    --muted: #57606a;
+    --line: #d0d7de;
+    --accent: #e8432e;
+    --hi: #b3261e;
+    --lo: #1f5fa8;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header.site {
+    display: flex;
+    gap: 1.5rem;
+    align-items: baseline;
+    padding: 0.75rem 16px;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+  }
+  header.site .brand {
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+  }
+  header.site nav {
+    display: flex;
+    gap: 1rem;
+  }
+  a {
+    color: #0b5cad;
+  }
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1rem 16px 2rem;
+  }
+  h1 {
+    margin: 0.5rem 0 0.25rem;
+    font-size: 1.8rem;
+  }
+  h2 {
+    font-size: 1.15rem;
+    margin: 0 0 0.75rem;
+  }
+  h2 .unit {
+    font-weight: 400;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-left: 0.4rem;
+  }
+  .lead {
+    color: var(--muted);
+    margin-top: 0;
+    max-width: 46rem;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    margin: 1rem 0;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin: 1rem 0;
+  }
+  .controls label {
+    font-weight: 600;
+  }
+  select {
+    font: inherit;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--card);
+    min-width: 12rem;
+  }
+  .status {
+    color: var(--muted);
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin: 0.5rem 0 0;
+  }
+  .calendar {
+    width: 100%;
+    min-height: 420px;
+  }
+  .now-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 1.5rem;
+  }
+  .now .value {
+    font-size: 2.4rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.1;
+  }
+  .now .value span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .now .ratio {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0 0 0.4rem;
+  }
+  .now .ratio span {
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .now .ratio.hi {
+    color: var(--hi);
+  }
+  .now .ratio.lo {
+    color: var(--lo);
+  }
+  .now dl {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.2rem 1rem;
+    margin: 0;
+    font-size: 0.92rem;
+  }
+  .now dt {
+    color: var(--muted);
+  }
+  .now dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+  }
+  .flag {
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0.4rem 0 0;
+  }
+  .about ul {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+  .about li {
+    margin: 0.3rem 0;
+  }
+  footer {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 16px 2rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  @media (max-width: 640px) {
+    .now-grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .now .value {
+      font-size: 2rem;
+    }
+  }
+</style>

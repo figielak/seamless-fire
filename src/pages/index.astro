@@ -4,19 +4,284 @@ import Base from '../layouts/Base.astro';
 
 <Base title="Seamless Fire">
   <h1>Seamless Fire</h1>
-  <p>Harmonized MODIS + VIIRS burning activity calendar, 2000 to today.</p>
-  <p id="status">Loading countries…</p>
+  <p class="lead">
+    Burning activity calendar from 2000 to today. MODIS (2000–) and VIIRS (2012–) hotspots are
+    put on one scale, so years before and after 2012 can be compared.
+  </p>
+
+  <div class="controls">
+    <label for="country">Country</label>
+    <select id="country" disabled><option>Loading…</option></select>
+    <span id="status" class="status" role="status"></span>
+  </div>
+
+  <section id="now" class="card now" aria-live="polite" hidden></section>
+
+  <section class="card">
+    <h2>Calendar <span class="unit">fire cell-days per month, VIIRS S-NPP scale</span></h2>
+    <div id="calendar" class="calendar"></div>
+    <p class="note" id="calendar-note"></p>
+  </section>
+
+  <section class="card about">
+    <h2>How to read it</h2>
+    <ul>
+      <li>
+        <b>Cell-day</b>: a 0.1° grid cell (about 11 km) with at least one vegetation fire detection on
+        a given day. Industrial heat sources (FIRMS <code>type</code> 2) are removed.
+      </li>
+      <li>
+        <b>From February 2012</b> the values are observed VIIRS S-NPP cell-days. <b>Before</b>, they are
+        estimated from MODIS with a per-country model calibrated on 2012–2025
+        (hover shows the ~80% interval).
+      </li>
+      <li>
+        Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
+        (Aug–Sep 2020), S-NPP outage (Jul–Aug 2022).
+      </li>
+    </ul>
+  </section>
 </Base>
 
 <script>
-  import { fetchJson, type Country } from '../lib/data';
+  import { fetchJson, loadCountry, type Country, type CountryData } from '../lib/data';
+  import { harmonize, monthAbs, monthCount, monthlyTotals, type Harmonized } from '../lib/harmonize';
+  import { monthStats } from '../lib/stats';
 
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTHS_LONG = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  const select = document.getElementById('country') as HTMLSelectElement;
   const status = document.getElementById('status')!;
-  fetchJson<Country[]>('countries.json')
-    .then((list) => {
-      status.textContent = `Countries: ${list.map((c) => c.name).join(', ')}`;
-    })
-    .catch(() => {
-      status.textContent = 'No data yet. Run: python pipeline/build_data.py';
+  const nowEl = document.getElementById('now')!;
+  const calEl = document.getElementById('calendar')!;
+  const noteEl = document.getElementById('calendar-note')!;
+
+  let countries: Country[] = [];
+  let requestId = 0;
+  let plotlyPromise: Promise<typeof import('plotly.js-dist-min')['default']> | null = null;
+
+  function plotly() {
+    plotlyPromise ??= import('plotly.js-dist-min').then((m) => m.default);
+    return plotlyPromise;
+  }
+
+  const fmt = (v: number) =>
+    v >= 100 ? Math.round(v).toLocaleString('en-US') : v >= 10 ? v.toFixed(0) : v.toFixed(1);
+  const monthLabel = (ym: string) => {
+    const [y, m] = ym.split('-').map(Number);
+    return `${MONTHS_LONG[m - 1]} ${y}`;
+  };
+  const ordinalPct = (p: number) => `${Math.round(p)}%`;
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  }
+
+  // ------------------------------------------------------------------ "Now" panel
+
+  function renderNow(country: Country, d: CountryData, h: Harmonized) {
+    const idx = h.value.length - 1;
+    const s = monthStats(h, idx);
+    const calName = MONTHS_LONG[(monthAbs(s.month) % 12)];
+    let compare: string;
+    if (s.ratio === null) {
+      compare = `<p class="big-note">Not enough history for a typical value.</p>`;
+    } else {
+      const r = s.ratio;
+      const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
+      const cls = r >= 1.25 ? 'hi' : r <= 0.8 ? 'lo' : 'mid';
+      compare = `
+        <p class="ratio ${cls}">${r >= 10 ? r.toFixed(0) : r.toFixed(1)}× typical
+          <span>(${word} the usual ${calName})</span></p>
+        <dl>
+          <dt>Typical ${calName} (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd>
+          <dt>Usual range in those years (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd>
+          <dt>Rank among ${s.nAll} ${calName}s since 2000</dt>
+          <dd>higher than ${ordinalPct(s.percentile)}</dd>
+        </dl>`;
+    }
+    const interval = h.estimated[idx]
+      ? `<p class="note">Estimated from MODIS, ~80% interval ${fmt(h.lo[idx])} – ${fmt(h.hi[idx])}.</p>`
+      : '';
+    const flags = [
+      h.preliminary[idx] ? 'preliminary data (near real-time)' : '',
+      h.lowQuality[idx] ? 'known sensor problem this month' : '',
+    ].filter(Boolean);
+    nowEl.innerHTML = `
+      <h2>Now: ${escapeHtml(country.name)}, ${monthLabel(s.month)}</h2>
+      <div class="now-grid">
+        <div>
+          <p class="value">${fmt(s.value)} <span>fire cell-days</span></p>
+          ${interval}
+          ${flags.length ? `<p class="flag">${flags.join('; ')}</p>` : ''}
+        </div>
+        <div>${compare}</div>
+      </div>
+      <p class="note">Latest complete month in the data
+        (${escapeHtml(d.model.last_complete_month)}). Model ${escapeHtml(d.model.model)},
+        VIIRS S-NPP scale.</p>`;
+    nowEl.hidden = false;
+  }
+
+  // ------------------------------------------------------------------ calendar
+
+  async function renderCalendar(country: Country, d: CountryData, h: Harmonized) {
+    const Plotly = await plotly();
+    const first = monthAbs(h.firstMonth);
+    const y0 = Math.floor(first / 12);
+    const y1 = Math.floor((first + h.value.length - 1) / 12);
+    const years: number[] = [];
+    for (let y = y0; y <= y1; y++) years.push(y);
+
+    const z: (number | null)[][] = years.map(() => new Array(12).fill(null));
+    const text: string[][] = years.map(() => new Array(12).fill(''));
+    const lowX: number[] = [], lowY: number[] = [];
+    const preX: number[] = [], preY: number[] = [];
+    let max = 0;
+    for (let i = 0; i < h.value.length; i++) {
+      const a = first + i;
+      const r = Math.floor(a / 12) - y0;
+      const c = a % 12;
+      const v = h.value[i];
+      max = Math.max(max, v);
+      z[r][c] = Math.log10(1 + v);
+      const lines = [
+        `<b>${MONTHS[c]} ${years[r]}</b>`,
+        `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
+      ];
+      if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
+      lines.push(`Raw MODIS: ${fmt(h.modis[i])}, raw VIIRS: ${fmt(h.viirs[i])}`);
+      if (h.terraOnly[i]) lines.push('Terra only (before Aqua), scaled up');
+      if (h.lowQuality[i]) { lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
+      if (h.preliminary[i]) { lines.push('Preliminary (near real-time)'); preX.push(c); preY.push(years[r]); }
+      text[r][c] = lines.join('<br>');
+    }
+
+    const ticks = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000].filter((t) => t <= max * 1.05);
+    const data: Partial<Plotly.Data>[] = [
+      {
+        type: 'heatmap',
+        x: MONTHS.map((_, i) => i),
+        y: years,
+        z,
+        text: text as unknown as string[],
+        hovertemplate: '%{text}<extra></extra>',
+        colorscale: 'Cividis',
+        zmin: 0,
+        zmax: Math.log10(1 + max),
+        xgap: 1,
+        ygap: 1,
+        showlegend: false,
+        colorbar: {
+          title: { text: 'cell-days', side: 'right' },
+          tickvals: ticks.map((t) => Math.log10(1 + t)),
+          ticktext: ticks.map(String),
+          thickness: 12,
+        },
+      } as Partial<Plotly.Data>,
+      {
+        type: 'scatter', mode: 'markers', x: lowX, y: lowY, name: 'known sensor problem',
+        hoverinfo: 'skip',
+        marker: { symbol: 'x-thin', size: 9, line: { width: 2, color: '#e8432e' } },
+      },
+      {
+        type: 'scatter', mode: 'markers', x: preX, y: preY, name: 'preliminary',
+        hoverinfo: 'skip',
+        marker: { symbol: 'circle-open', size: 10, line: { width: 2, color: '#f28e2b' } },
+      },
+    ];
+
+    // Step line between estimated and observed months (VIIRS starts in Feb 2012).
+    const vf = monthAbs(d.model.viirs_first_month);
+    const vy = Math.floor(vf / 12);
+    const vc = vf % 12;
+    const path = vc === 0
+      ? `M -0.5 ${vy - 0.5} L 11.5 ${vy - 0.5}`
+      : `M -0.5 ${vy + 0.5} L ${vc - 0.5} ${vy + 0.5} L ${vc - 0.5} ${vy - 0.5} L 11.5 ${vy - 0.5}`;
+    const lastEst = vf - 1;
+    const estLabel = `${MONTHS[first % 12]} ${y0} – ${MONTHS[lastEst % 12]} ${Math.floor(lastEst / 12)}`;
+
+    const narrow = calEl.clientWidth < 560;
+    const layout: Partial<Plotly.Layout> = {
+      height: Math.max(420, years.length * 20 + 110),
+      margin: { l: 44, r: 10, t: 28, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
+      xaxis: {
+        tickvals: MONTHS.map((_, i) => i),
+        ticktext: narrow ? MONTHS.map((m) => m[0]) : MONTHS,
+        side: 'top', range: [-0.5, 11.5], fixedrange: true, showgrid: false, zeroline: false,
+      },
+      yaxis: {
+        range: [y1 + 0.5, y0 - 0.5], dtick: narrow ? 2 : 1, fixedrange: true, showgrid: false,
+        zeroline: false,
+      },
+      shapes: [{ type: 'path', path, line: { color: '#e8432e', width: 2.5 }, layer: 'above' }],
+      legend: { orientation: 'h', x: 0, y: -0.02, yanchor: 'top' },
+      showlegend: lowX.length + preX.length > 0,
+    };
+    await Plotly.react(calEl, data as Plotly.Data[], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+      toImageButtonOptions: { filename: `seamless-fire-${country.code}-calendar` },
     });
+    noteEl.innerHTML =
+      `Above the red line (<b>${estLabel}</b>): estimated from MODIS. Below: observed VIIRS. ` +
+      `Color scale is logarithmic.`;
+  }
+
+  // ------------------------------------------------------------------ flow
+
+  async function show(code: string) {
+    const country = countries.find((c) => c.code === code) ?? countries[0];
+    select.value = country.code;
+    const id = ++requestId;
+    status.textContent = `Loading ${country.name}…`;
+    try {
+      const t0 = performance.now();
+      const d = await loadCountry(country.code);
+      if (id !== requestId) return; // a newer selection won
+      const n = monthCount(d.cells.first_month, d.model.last_complete_month);
+      const h = harmonize(monthlyTotals(d.cells, n), d.model);
+      renderNow(country, d, h);
+      await renderCalendar(country, d, h);
+      if (id !== requestId) return;
+      status.textContent = '';
+      console.info(`[seamless-fire] ${country.code}: first chart ${(performance.now() - t0).toFixed(0)} ms after select`);
+    } catch (err) {
+      if (id !== requestId) return;
+      console.error(err);
+      status.textContent = `Could not load ${country.name}. Check the connection and try again.`;
+    }
+  }
+
+  function codeFromHash() {
+    return location.hash.replace('#', '').toUpperCase();
+  }
+
+  async function init() {
+    try {
+      countries = await fetchJson<Country[]>('countries.json');
+    } catch {
+      status.textContent = 'No data found. Run: python pipeline/build_data.py';
+      return;
+    }
+    select.innerHTML = countries
+      .map((c) => `<option value="${c.code}">${escapeHtml(c.name)}</option>`)
+      .join('');
+    select.disabled = false;
+    select.addEventListener('change', () => {
+      history.replaceState(null, '', `#${select.value}`);
+      show(select.value);
+    });
+    window.addEventListener('hashchange', () => show(codeFromHash()));
+    show(codeFromHash() || 'PL');
+  }
+
+  init();
 </script>
