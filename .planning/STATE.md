@@ -18,7 +18,7 @@ Updated: 2026-11-14
 ## Next step
 
 1. Stage 3: site minimum (country select, calendar, "Now" panel) from cells.json + model.json; deploy to GitHub Pages and verify the live URL
-2. Push stage 1+2 commits
+2. After stage 3: EFFIS independent check 2000–2011 (CLAUDE.md work order 3b)
 
 ## Blockers / open questions
 

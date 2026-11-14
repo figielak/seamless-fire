@@ -162,12 +162,15 @@ Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
    Plus spatial agreement (2012–2025, per country): share of MODIS cell-days that VIIRS also
    detects, and vice versa, overall and per month; store in `model.json` for the Method page.
 3. Site minimum: country select, calendar, "Now" panel. **Deploy to GitHub Pages immediately.**
+   3b. Independent check 2000–2011: EFFIS annual country statistics (burnt area, number of fires) for
+   PL, PT, ES, GR vs harmonized annual totals; compare correlation before and after 2012. Use official
+   EFFIS downloads, do not scrape the viewer. Result → new section in `docs/validation.md`, cite EFFIS.
 4. Pipeline: other countries, 2026 data, hotspot files.
 5. Site: rectangle, Leaflet polygon, date range, CSV export, anomalies, annual chart.
 6. Site: raw/harmonized toggle, season profile, briefing, Method page.
 7. README (English, license, data sources, LLM disclosure).
 
-If time runs out, drop in this order: Leaflet polygon (keep rectangle inputs) → season profile → briefing →
+If time runs out, drop in this order: EFFIS check (3b) → Leaflet polygon (keep rectangle inputs) → season profile → briefing →
 2026 data → countries other than PL and PT.
 
 Work one stage at a time and report results before moving on.
