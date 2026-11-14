@@ -231,6 +231,53 @@ Both sensors put the large 2017 and 2023 events at the top. The 2024 fire was de
 compact (a few cells at the urban edge over a few days), so it barely shows in cell-days.
 The calendar measures widespread fire activity, not the impact of a single fire.
 
+### 9a. Independent check against EFFIS national statistics (`pipeline/effis_check.py`)
+
+Source: EFFIS country totals (forest fire burnt area in ha and number of forest fires, 1980–2024,
+reported by national authorities), from *Forest fires in Europe, Middle East and North Africa
+2024*, European Commission JRC, [doi:10.2760/0649290](https://dx.doi.org/10.2760/0649290),
+file "Country totals 2024" on the [EFFIS data page](https://forest-fire.emergency.copernicus.eu/applications/data-and-services).
+Not a satellite product, so it is independent of FIRMS. 2000 is skipped (partial Terra year);
+UA starts in 2007.
+
+Test: fit log(series) = α + β·log(EFFIS) on 2012–2024 (observed VIIRS), then measure how far the
+2001–2011 years sit from that line (*level shift*). Three series are compared:
+**harmonized** (ours), a **naive splice** (raw MODIS cell-days to 2011, VIIRS from 2012), and
+**MODIS only** (one sensor for the whole period, the control). Spearman ρ is per period
+(2001–2011 / 2012–2024).
+
+| Country | ρ harmonized | ρ MODIS only | Shift: naive splice | Shift: harmonized | Shift: MODIS only | Expected from MODIS (×b) |
+|---|---|---|---|---|---|---|
+| **Burnt area** | | | | | | |
+| PL | 0.79 / 0.80 | 0.82 / 0.46 | −51% | +26% | +72% | +36% |
+| PT | 0.70 / 0.64 | 0.65 / 0.84 | −24% | +35% | +41% | +32% |
+| ES | 0.48 / 0.36 | 0.69 / 0.45 | −34% | +47% | +58% | +42% |
+| GR | 0.54 / −0.07 | 0.58 / 0.09 | −49% | +36% | +50% | +37% |
+| UA | 0.50 / 0.35 | 0.50 / 0.45 | −37% | +40% | +53% | +41% |
+| **Number of fires** | | | | | | |
+| PL | 0.52 / 0.75 | 0.66 / 0.35 | −51% | +25% | +76% | +37% |
+| PT | 0.81 / 0.95 | 0.69 / 0.79 | −59% | −27% | −23% | −19% |
+| ES | 0.74 / 0.92 | 0.68 / 0.87 | −52% | +5% | +3% | +2% |
+| GR | 0.93 / −0.07 | 0.83 / −0.03 | −48% | +39% | +44% | +33% |
+| UA | 0.50 / 0.64 | 0.50 / 0.68 | −63% | −17% | −16% | −13% |
+
+Findings:
+
+- **The naive splice is wrong everywhere.** It puts 2001–2011 24–63% too low relative to EFFIS,
+  the artificial jump at 2012 that harmonization is meant to remove.
+- **The harmonized series follows the single-sensor control.** Its shift matches what MODIS alone
+  implies through the model slope (last column) within ±12 points in every country and
+  both EFFIS measures. So the reconstruction adds no extra break at 2012.
+- **EFFIS cannot confirm the absolute level better than about ±40%.** Even MODIS alone, one
+  sensor in both periods, sits 40–70% higher per unit of EFFIS burnt area in 2001–2011 than in
+  2012–2024. The link between national *forest* fire statistics and satellite *vegetation* fire
+  detections (which include agricultural burning) changed over time. This drift is a property of
+  the comparison, not of the harmonization.
+- **Year-to-year agreement before 2012 is as good as after.** Rank correlation of harmonized
+  values with EFFIS burnt area is similar or higher in 2001–2011 than in 2012–2024 (PL 0.79 / 0.80,
+  PT 0.70 / 0.64). Greece after 2012 shows no correlation for any satellite series: the large
+  2021 and 2023 fires are compact in cell-days (see §1a) while many small fires fill other years.
+
 ## 10. Data quality checks
 
 - All raw files checked for truncation (field count of the last row). Two Canadian files were

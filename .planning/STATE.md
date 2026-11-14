@@ -7,7 +7,7 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **3 done** (live, verified 2026-11-14 on https://figielak.github.io/seamless-fire/), next: **3b (EFFIS)**
+- Stage: **3 + 3b done** (site live https://figielak.github.io/seamless-fire/; EFFIS check in validation.md §9a; unit sensitivity §1a), next: **4**
 - Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
   `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
   and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
@@ -18,8 +18,8 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. 3b: EFFIS independent check 2000–2011 (PL, PT, ES, GR) → `docs/validation.md`
-2. Stage 4: 2026 data (set `last_complete_month`, preliminary flags), hotspot files
+1. Stage 4: 2026 data (set `last_complete_month`, preliminary flags), hotspot files,
+   plus raw VIIRS detections per cell-month in cells.json (shown next to cell-days, not harmonized; user agreed)
 
 ## Blockers / open questions
 
