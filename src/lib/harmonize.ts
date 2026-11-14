@@ -10,6 +10,7 @@ export interface Cells {
   m: number[]; // month index since first_month
   modis: number[]; // MODIS (Terra + Aqua) cell-days
   viirs: number[]; // VIIRS cell-days on the S-NPP scale
+  viirs_det?: number[]; // raw S-NPP detections (type 0); absent = no data, not zero
 }
 
 export interface TerraOnly {
@@ -30,10 +31,19 @@ export interface Model {
   terra_only: TerraOnly;
   viirs_first_month: string;
   low_quality: string[];
-  preliminary?: string[]; // months with NRT data (stage 4)
+  preliminary?: string[]; // months with near real-time data
   last_complete_month: string;
   last_data: Record<string, string>;
-  annual: { years: number[]; harmonized: number[]; lo: number[]; hi: number[] };
+  coverage?: Record<string, [string, string]>; // satellite -> [first, last] date in the raw files
+  hotspots?: boolean; // {CC}/hotspots/{year}.csv exist (not for AU, CA)
+  hotspot_sensors?: Record<string, string[]>; // year -> satellites present in the hotspot files
+  annual: {
+    years: number[];
+    harmonized: number[];
+    lo: number[];
+    hi: number[];
+    partial_year?: boolean[]; // same length as years; true = year not complete in the data
+  };
   [key: string]: unknown;
 }
 
@@ -41,6 +51,7 @@ export interface Series {
   firstMonth: string;
   modis: Float64Array;
   viirs: Float64Array;
+  viirsDet?: Float64Array; // undefined when cells.json has no detection column
 }
 
 export interface Harmonized {
@@ -50,6 +61,7 @@ export interface Harmonized {
   hi: Float64Array;
   modis: Float64Array;
   viirs: Float64Array;
+  viirsDet?: Float64Array; // raw S-NPP detections, shown as is (not harmonized)
   estimated: boolean[];
   terraOnly: boolean[];
   lowQuality: boolean[];
@@ -88,6 +100,8 @@ export function monthlyTotals(
 ): Series {
   const modis = new Float64Array(nMonths);
   const viirs = new Float64Array(nMonths);
+  const det = cells.viirs_det;
+  const viirsDet = det ? new Float64Array(nMonths) : undefined;
   const d = cells.cell_deg;
   for (let i = 0; i < cells.m.length; i++) {
     const mi = cells.m[i];
@@ -95,8 +109,11 @@ export function monthlyTotals(
     if (keep && !keep((cells.lat[i] + 0.5) * d, (cells.lon[i] + 0.5) * d)) continue;
     modis[mi] += cells.modis[i];
     viirs[mi] += cells.viirs[i];
+    if (viirsDet) viirsDet[mi] += det![i];
   }
-  return { firstMonth: cells.first_month, modis, viirs };
+  return viirsDet
+    ? { firstMonth: cells.first_month, modis, viirs, viirsDet }
+    : { firstMonth: cells.first_month, modis, viirs };
 }
 
 /** Harmonized monthly series on the VIIRS S-NPP scale with ~80% interval for estimated months. */
@@ -118,6 +135,7 @@ export function harmonize(s: Series, model: Model): Harmonized {
     hi: new Float64Array(n),
     modis: s.modis,
     viirs: s.viirs,
+    ...(s.viirsDet ? { viirsDet: s.viirsDet } : {}),
     estimated: new Array(n),
     terraOnly: new Array(n),
     lowQuality: new Array(n),

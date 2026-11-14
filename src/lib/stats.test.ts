@@ -4,8 +4,14 @@ import { midRankPercentile, monthStats, quantile } from './stats.ts';
 import type { Harmonized } from './harmonize.ts';
 
 /** Synthetic series from 2000-01; f(year, calMonth0) -> value. */
-function series(lastYear: number, f: (y: number, m: number) => number, lowQ: string[] = []): Harmonized {
-  const n = (lastYear - 2000 + 1) * 12;
+function series(
+  lastYear: number,
+  f: (y: number, m: number) => number,
+  lowQ: string[] = [],
+  lastMonth = 12,
+  prelim: string[] = [],
+): Harmonized {
+  const n = (lastYear - 2000) * 12 + lastMonth;
   const value = new Float64Array(n);
   const lowQuality: boolean[] = [];
   for (let i = 0; i < n; i++) {
@@ -16,9 +22,11 @@ function series(lastYear: number, f: (y: number, m: number) => number, lowQ: str
   }
   const z = new Float64Array(n);
   const no = new Array(n).fill(false);
+  const preliminary = Array.from({ length: n }, (_, i) =>
+    prelim.includes(`${2000 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`));
   return {
     firstMonth: '2000-01', value, lo: value, hi: value, modis: z, viirs: z,
-    estimated: no, terraOnly: no, lowQuality, preliminary: no,
+    estimated: no, terraOnly: no, lowQuality, preliminary,
   };
 }
 
@@ -31,6 +39,18 @@ test('reference years: 2025-12 uses 2015..2024', () => {
   assert.equal(s.refTo, 2024);
   assert.equal(s.nRef, 10);
   assert.equal(s.median, 2019.5);
+});
+
+test('2026-10 (preliminary): reference 2016..2025, preliminary months only in their own stats', () => {
+  const prelim = ['2026-08', '2026-09', '2026-10'];
+  const h = series(2026, (y, m) => (m === 9 ? y : 0), [], 10, prelim);
+  const s = monthStats(h, h.value.length - 1);
+  assert.equal(s.month, '2026-10');
+  assert.equal(s.refFrom, 2016);
+  assert.equal(s.refTo, 2025);
+  assert.equal(s.nRef, 10);
+  assert.equal(s.median, 2020.5);
+  assert.equal(s.nAll, 27); // 2000..2025 + the month itself
 });
 
 test('zero median: k keeps the ratio finite', () => {

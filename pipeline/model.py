@@ -10,17 +10,42 @@ import pandas as pd
 
 from config import (
     CACHE_DIR, CALIB_EXCLUDE, CALIB_YEARS, COUNTRIES, DE_TIE, FIRST_MONTH, INTERVAL_Z,
-    LAST_YEAR_STAGE1, LOW_QUALITY, MIN_FIRE_MONTHS, N20_FACTOR_YEARS, OUT_DIR,
+    HIST_LAST_YEAR, LAST_COMPLETE_MONTH, LOW_QUALITY, MIN_FIRE_MONTHS, N20_FACTOR_YEARS, OUT_DIR,
     SATELLITE_SENSOR, SEASON_OF_MONTH, SNPP_LAST_DATE, TERRA_SEASON_MIN,
 )
 
 METHODS = ["A", "B", "C", "D", "E", "D+s", "E+s"]
 BACKTEST_TRAIN = (2019, 2025)
 BACKTEST_TEST = (2012, 2018)
-ALL_MONTHS = pd.period_range(FIRST_MONTH, f"{LAST_YEAR_STAGE1}-12", freq="M")
+ALL_MONTHS = pd.period_range(FIRST_MONTH, LAST_COMPLETE_MONTH, freq="M")
 
 
 # ---------------------------------------------------------------- monthly series
+
+def load_meta(code: str, check_files: bool = True) -> dict:
+    """Cache metadata; refuse a cache built for another coverage end or other raw files,
+    so a stale cache is never silently padded with zero months."""
+    path = CACHE_DIR / f"{code}_meta.json"
+    if not path.exists():
+        raise RuntimeError(f"{code}: cache has no metadata, rebuild with build_data.py {code}")
+    meta = json.loads(path.read_text())
+    if meta["last_complete_month"] != LAST_COMPLETE_MONTH:
+        raise RuntimeError(f"{code}: cache ends {meta['last_complete_month']}, config {LAST_COMPLETE_MONTH}")
+    if check_files:
+        from build_data import raw_files  # lazy: build_data imports this module
+        current = [[f.name, f.stat().st_size] for f in raw_files(code)]
+        if current != meta["files"]:
+            raise RuntimeError(f"{code}: raw files changed since the cache was built, rebuild")
+    return meta
+
+
+def check_coverage(code: str, meta: dict) -> None:
+    """S-NPP (the target scale) must cover the whole last month."""
+    last = meta["coverage"].get("SNPP", [None, ""])[1]
+    end = str(pd.Period(LAST_COMPLETE_MONTH, "M").end_time.date())
+    if last < end:
+        raise RuntimeError(f"{code}: S-NPP data end {last}, before the end of {LAST_COMPLETE_MONTH}")
+
 
 def load_celldays(code: str) -> pd.DataFrame:
     cd = pd.read_parquet(CACHE_DIR / f"{code}_celldays.parquet")
@@ -195,7 +220,7 @@ def terra_only(cd: pd.DataFrame, ms: pd.DataFrame) -> dict:
     """(Terra ∪ Aqua)/Terra ratio for months before Aqua, per season if stable."""
     first_aqua = cd.loc[cd["sat"] == "Aqua", "date"].min().to_period("M")
     until = first_aqua - 1  # last month without any Aqua data
-    sel = ms[(ms.index.year >= 2003) & (ms.index.year <= LAST_YEAR_STAGE1)]
+    sel = ms[(ms.index.year >= 2003) & (ms.index.year <= HIST_LAST_YEAR)]
     sel = sel[~sel.index.astype(str).isin(CALIB_EXCLUDE)]
     season = np.array([SEASON_OF_MONTH[m] for m in sel.index.month])
     overall = sel["MODIS"].sum() / sel["Terra"].sum()
@@ -267,7 +292,8 @@ def harmonized_monthly(ms: pd.DataFrame, a: list, b: float, terra: dict) -> pd.D
 def annual_series(hm: pd.DataFrame, sigma_annual: float, b: float, sigma_terra: float) -> dict:
     g = hm.groupby(hm.index.year).agg(
         modis=("modis", "sum"), viirs=("viirs", "sum"), harmonized=("harmonized", "sum"),
-        estimated=("estimated", "all"), terra_only=("terra_only", "any"))
+        estimated=("estimated", "all"), terra_only=("terra_only", "any"),
+        n_months=("harmonized", "size"))
     s = np.where(g["terra_only"], np.sqrt(sigma_annual ** 2 + (b * sigma_terra) ** 2), sigma_annual)
     k = np.where(g["estimated"], np.exp(INTERVAL_Z * s), 1.0)
     return {
@@ -277,6 +303,7 @@ def annual_series(hm: pd.DataFrame, sigma_annual: float, b: float, sigma_terra: 
         "harmonized": [round(float(v), 1) for v in g["harmonized"]],
         "lo": [round(float(v), 1) for v in g["harmonized"] / k],
         "hi": [round(float(v), 1) for v in g["harmonized"] * k],
+        "partial_year": [bool(n < 12) for n in g["n_months"]],
     }
 
 
@@ -300,6 +327,7 @@ def build_models(codes: list[str]) -> dict:
     """Write {CC}/model.json for each code; A and the pooled model use all cached countries."""
     data = {}
     for c in cached_countries():
+        load_meta(c)  # every country in method A / the pooled model must use the current cache
         cd = load_celldays(c)
         ms = monthly_series(c, cd)
         data[c] = (cd, ms, calib_frame(c, ms))
@@ -308,6 +336,8 @@ def build_models(codes: list[str]) -> dict:
     pooled = None
     results = {}
     for code in codes:
+        meta = load_meta(code)
+        check_coverage(code, meta)
         cd, ms, frame = data[code]
         val = validate(frame, frame_all, METHODS)
         fire_months = int(((frame["M"] > 0) & (frame["V"] > 0)).sum())
@@ -340,11 +370,17 @@ def build_models(codes: list[str]) -> dict:
             "methods": val,
             "agreement": agreement(cd, first),
             "industrial_share": industrial_share(code),
+            "industrial_share_years": [int(FIRST_MONTH[:4]), HIST_LAST_YEAR],
+            "industrial_mask": meta["industrial_mask"],
             "annual": annual_series(hm, sigma_annual, p["b"], terra["sigma"]),
             "low_quality": LOW_QUALITY, "calib_excluded": CALIB_EXCLUDE,
             "last_data": {k: str(v.date()) for k, v in last.items()},
-            # End of data coverage (not the last detection date); stage 4 moves it into 2026.
-            "last_complete_month": f"{LAST_YEAR_STAGE1}-12",
+            # End of data coverage (not the last detection date).
+            "last_complete_month": LAST_COMPLETE_MONTH,
+            "preliminary": meta["preliminary"],
+            "coverage": meta["coverage"],
+            "hotspots": meta["hotspots"],
+            "hotspot_sensors": meta["sensors_by_year"] if meta["hotspots"] else {},
         }
         out = rnd(model)
         # Parameters the site computes with keep full precision (rounded ones shift sums).

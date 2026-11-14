@@ -6,6 +6,7 @@ Run: python -m unittest discover -s pipeline/tests -v
 import json
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -53,7 +54,8 @@ class ProcessFileTest(unittest.TestCase):
             modis_row(50.15, 20.01, "2012-05-01", "Terra", 2),               # industrial
             modis_row(50.01, 20.01, "2012-05-02", "Terra", 0),               # next day
         ])
-        cells, stats, bbox = build_data.process_file(f)
+        r = build_data.process_file(f)
+        cells, stats, bbox = r.cells, r.stats, r.bbox
         self.assertEqual(len(cells), 3)  # Terra day1, Aqua day1, Terra day2
         self.assertEqual(set(cells["sat"]), {"Terra", "Aqua"})
         s = stats.set_index(["sat", "type"])["n"]
@@ -83,6 +85,93 @@ class ProcessFileTest(unittest.TestCase):
             self.assertEqual([p.name for p in build_data.raw_files("PL")], ["modis_2012_Poland.csv"])
         finally:
             build_data.RAW_DIR = old
+
+
+VIIRS_HEADER = ("latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,"
+                "confidence,version,bright_ti5,frp,daynight,type")
+
+
+def viirs_row(lat, lon, date, typ="", version="2", time="0130", sat="SNPP"):
+    return f"{lat},{lon},330,0.4,0.4,{date},{time},{sat},VIIRS,n,{version},280,5,N,{typ}"
+
+
+class NrtTest(unittest.TestCase):
+    """2026 files: archive rows with `type`, near real-time rows (`2.0NRT`) with empty `type`."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "viirs-snpp_2026_Testland.csv"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rows):
+        self.path.write_text("\n".join([VIIRS_HEADER, *rows]) + "\n", encoding="utf-8")
+        return self.path
+
+    def test_nrt_rows_use_mask_archive_rows_keep_type(self):
+        mask = build_data.mask_keys([50.123], [20.456])
+        f = self.write([
+            viirs_row(50.1231, 20.4561, "2026-07-30", typ=0),               # archive, in mask cell, real type 0 kept
+            viirs_row(50.1232, 20.4562, "2026-08-02", version="2.0NRT"),    # NRT in mask -> industrial
+            viirs_row(50.5, 20.5, "2026-08-03", version="2.0NRT"),          # NRT outside -> vegetation
+            viirs_row(50.6, 20.6, "2026-11-05", version="2.0NRT"),          # after LAST_COMPLETE_MONTH: dropped
+        ])
+        r = build_data.process_file(f, mask=mask)
+        self.assertEqual(r.preliminary, {"2026-08"})
+        self.assertEqual((r.n_nrt, r.n_masked), (2, 1))
+        self.assertEqual(sorted(r.cells["date"].dt.strftime("%m-%d")), ["07-30", "08-03"])
+        # filter stats only from rows with a real `type`
+        self.assertEqual(r.stats["n"].sum(), 1)
+        self.assertEqual(r.sat_dates["SNPP"], ("2026-07-30", "2026-11-05"))
+
+    def test_archive_wins_over_nrt_on_shared_days(self):
+        f = self.write([
+            viirs_row(50.1, 20.1, "2026-07-31", typ=0),
+            viirs_row(50.2, 20.2, "2026-07-31", version="2.0NRT"),  # same day as archive: dropped
+            viirs_row(50.3, 20.3, "2026-08-01", version="2.0NRT"),
+        ])
+        r = build_data.process_file(f, mask=np.array([], np.int64))
+        self.assertEqual(int(r.detections["n"].sum()), 2)
+        self.assertEqual(r.n_nrt, 1)
+
+    def test_nrt_without_mask_fails(self):
+        f = self.write([viirs_row(50.1, 20.1, "2026-08-01", version="2.0NRT")])
+        with self.assertRaises(ValueError):
+            build_data.process_file(f)
+
+    def test_missing_type_in_archive_row_is_dropped(self):
+        f = self.write([viirs_row(50.1, 20.1, "2026-07-01", typ=0), viirs_row(50.2, 20.2, "2026-07-01")])
+        self.assertEqual(len(build_data.read_file(f)), 1)
+
+    def test_duplicates_removed_before_counting(self):
+        row = viirs_row(50.11, 20.11, "2026-05-01", typ=0)
+        f = self.write([row, row, viirs_row(50.12, 20.12, "2026-05-01", typ=0, time="0131")])
+        r = build_data.process_file(f, hotspots=True)
+        self.assertEqual(int(r.detections["n"].sum()), 2)  # one cell-month, two detections
+        self.assertEqual(len(r.cells), 1)
+        self.assertEqual(len(r.hotspots), 2)
+        self.assertEqual(r.hotspots["time"].tolist(), ["0130", "0131"])
+
+
+class MaskTest(unittest.TestCase):
+    def test_majority_rule(self):
+        counts = pd.DataFrame({"k": [1, 2, 3, 3], "t2": [5, 1, 0, 2], "n": [6, 4, 3, 1]})
+        self.assertEqual(build_data.build_mask(counts, 0.5).tolist(), [1, 3])  # cell 3: 2 of 4
+        self.assertEqual(build_data.build_mask(counts, 0.0).tolist(), [1, 2, 3])
+
+    def test_keys_negative_coordinates(self):
+        k = build_data.mask_keys([-33.4567, -33.4512], [-70.6543, -70.6501])
+        self.assertEqual(k[0], k[1])
+        self.assertNotEqual(build_data.mask_keys([-33.455], [-70.65])[0], k[0])
+
+    def test_overlapping_files_fail(self):
+        r = lambda a, b: types.SimpleNamespace(sat_dates={"SNPP": (a, b)})
+        build_data.check_date_ranges([(Path("x1"), r("2025-01-01", "2025-12-31")),
+                                      (Path("x2"), r("2026-01-01", "2026-10-31"))])
+        with self.assertRaises(ValueError):
+            build_data.check_date_ranges([(Path("x1"), r("2025-01-01", "2026-01-02")),
+                                          (Path("x2"), r("2026-01-01", "2026-10-31"))])
 
 
 class CellsJsonTest(unittest.TestCase):

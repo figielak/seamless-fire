@@ -7,19 +7,21 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **3 + 3b done** (site live https://figielak.github.io/seamless-fire/; EFFIS check in validation.md §9a; unit sensitivity §1a), next: **4**
+- Stage: **4 done** (2026 data to 2026-10, preliminary 2026-08…10, `viirs_det`, hotspot CSVs for PL/PT/ES/GR/UA/CL), next: **5**
 - Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
   `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
   and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
 - Pipeline: stages 1–2 done for 8 countries; model.json has full-precision params + `last_complete_month`
-- Tests: `python -m unittest discover -s pipeline/tests` (12), `npm run test:site`, `npm run check`
+- Tests: `python -m unittest discover -s pipeline/tests` (20), `npm run test:site` (36), `npm run check`
+- Mask check: `python pipeline/mask_check.py` (validation.md §2a). Model step refuses stale cache (`{CC}_meta.json`)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`)
 
 ## Next step
 
-1. Stage 4: 2026 data (set `last_complete_month`, preliminary flags), hotspot files,
-   plus raw VIIRS detections per cell-month in cells.json (shown next to cell-days, not harmonized; user agreed)
+1. Stage 5: rectangle inputs, Leaflet polygon, date range, CSV export (monthly + hotspots via
+   `model.hotspots`/`hotspot_sensors`; AU/CA → FIRMS link), anomalies top 10, annual chart (`annual.partial_year`).
+   Ask the user first about the empty-area intercept (see Blockers).
 
 ## Blockers / open questions
 
@@ -28,6 +30,8 @@ Updated: 2026-11-14
 - PT backtest systematic underestimate (−26%, every year): not smearing; likely drift between 2012–18 and 2019–25. Mention as limitation
 
 ## Done
+
+- Stage 4: 2000–2025 outputs identical to stage 3 (all 8 countries); dist 207 MB; AU cells.json 23.8 MB / 2.9 MB gzip
 
 - Stage 1: cell-days PL/PT, corr 0.92/0.95, cell-day ratio 3.5/1.9, totals in cells.json match cache
 - Stage 3: site minimum live; AU live: 2.2 MB gzip, parse 64 ms, first chart 1.6 s with Plotly preloaded

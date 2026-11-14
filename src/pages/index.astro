@@ -141,6 +141,17 @@ import Base from '../layouts/Base.astro';
     const text: string[][] = years.map(() => new Array(12).fill(''));
     const lowX: number[] = [], lowY: number[] = [];
     const preX: number[] = [], preY: number[] = [];
+    // Months outside a sensor's raw-file coverage show "no data", not 0.
+    const cov = d.model.coverage ?? {};
+    const span = (sats: string[]) => {
+      const c = sats.map((x) => cov[x]).filter(Boolean);
+      return c.length
+        ? [Math.min(...c.map((x) => monthAbs(x[0].slice(0, 7)))), Math.max(...c.map((x) => monthAbs(x[1].slice(0, 7))))]
+        : [-Infinity, Infinity];
+    };
+    const [modisFrom, modisTo] = span(['Terra', 'Aqua']);
+    const [viirsFrom, viirsTo] = span(['SNPP']);
+    const raw = (v: number, a: number, from: number, to: number) => (a < from || a > to ? 'no data' : fmt(v));
     let max = 0;
     for (let i = 0; i < h.value.length; i++) {
       const a = first + i;
@@ -154,7 +165,10 @@ import Base from '../layouts/Base.astro';
         `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
       ];
       if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
-      lines.push(`Raw MODIS: ${fmt(h.modis[i])}, raw VIIRS: ${fmt(h.viirs[i])}`);
+      lines.push(
+        `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${raw(h.viirs[i], a, viirsFrom, viirsTo)}`,
+      );
+      if (h.viirsDet && !h.estimated[i]) lines.push(`VIIRS detections: ${fmt(h.viirsDet[i])}`);
       if (h.terraOnly[i]) lines.push('Terra only (before Aqua), scaled up');
       if (h.lowQuality[i]) { lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
       if (h.preliminary[i]) { lines.push('Preliminary (near real-time)'); preX.push(c); preY.push(years[r]); }

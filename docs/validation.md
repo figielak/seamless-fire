@@ -75,6 +75,37 @@ Without the filter almost three quarters of Polish VIIRS "fires" would be indust
 Chile is the only country where the industrial share is similar for both sensors (copper
 smelters and other large static sources are bright enough for MODIS too).
 
+Shares are computed from the yearly files 2000–2025 only (frozen, so adding 2026 does not move them).
+
+### 2a. Industrial mask for near real-time 2026 rows (`pipeline/mask_check.py`)
+
+FIRMS near real-time rows (2026-08-01 onward, `version = 2.0NRT`) have an empty `type`. For
+those rows only, a detection is treated as industrial when its 0.01° cell was mostly
+industrial in 2012–2025: `type == 2` is at least 50% of the cell's VIIRS (S-NPP + NOAA-20)
+detections. Archive rows keep their own `type`; where archive and NRT cover the same day, the
+archive wins.
+
+Out-of-sample test: the 2026 archive rows (2026-01…07) still have `type`. We hide it, apply
+the mask, and compare S-NPP type-0 cell-days with the truth (7 months per country).
+
+| Country | Mask rule | type 2 caught | type 0 wrongly cut | cell-day error | monthly log-RMSE |
+|---|---|---|---|---|---|
+| PL | any type 2 | 99.9% | 24.2% | −26.2% | 0.46 |
+| PL | **≥ 50% type 2** | 94.7% | 11.0% | **−2.5%** | 0.16 |
+| PT | any / ≥ 50% | 100% / 100% | 1.0% / 0.4% | −2.8% / **−1.8%** | 0.07 / 0.04 |
+| ES | any / ≥ 50% | 100% / 96.3% | 1.6% / 1.0% | −5.7% / **−2.2%** | 0.08 / 0.03 |
+| GR | any / ≥ 50% | 100% / 91.3% | 4.4% / 2.4% | −8.6% / **+0.4%** | 0.16 / 0.02 |
+| UA | any / ≥ 50% | 100% / 95.3% | 0.8% / 0.6% | **−0.1%** / +2.4% | 0.04 / 0.14 |
+| CL | any / ≥ 50% | 99.5% / 98.5% | 0.5% / 0.2% | −1.0% / **−0.1%** | 0.01 / 0.01 |
+
+The "any type 2" rule removes a quarter of real Polish vegetation detections, because in
+Poland many fires (field burning around towns and industry) fall into cells that had an
+occasional industrial detection. The majority rule keeps the 2026 near real-time months within
+a few percent of the archive-quality result in all six countries (thresholds 0.25, 0.75, 0.9
+and a 3×3 neighbourhood were also tried and were worse overall). AU and CA (pipeline log):
+type 2 caught 90.6% / 88.8%, type 0 wrongly cut 0.04% / 0.06%. The months 2026-08…10 stay
+flagged as preliminary.
+
 ## 3. Do the two sensors see the same fire activity?
 
 | | PL | PT | ES | GR | UA | AU | CA | CL |
@@ -286,14 +317,22 @@ Findings:
 - Totals in each `cells.json` equal the totals of the cell-day cache (checked by tests).
 - One Polish cell and month checked by hand against the raw CSV (19 unique days = 19 cell-days).
 - Chile (48 files, downloaded 2026-11-14) checked the same way: all files complete, Jan–Dec coverage.
+- Stage 4 regression: after adding 2026 data, every 2000–2025 output (model parameters, all
+  method metrics, agreement, NOAA-20 factor, Terra-only ratio, annual series with intervals,
+  every `cells.json` row) is identical to the stage 3 build for all 8 countries.
+- Each country's S-NPP files must cover the whole last month (2026-10); the model step refuses a
+  cache built for other raw files or another end month.
 
 ## 11. Automated tests
 
-`pipeline/tests/test_pipeline.py`, 12 tests, all passing:
+`pipeline/tests/test_pipeline.py`, 20 tests, all passing:
 - 0.1° cell indexing at float edges
 - `type` filter, duplicate removal, leading zeros in `acq_time`, error on unknown satellite,
   skipping browser duplicates such as `Poland(1).csv`
 - MODIS counted as Terra ∪ Aqua
+- 2026 files: NRT rows typed by the mask, archive rows keep `type`, archive wins on shared days,
+  rows after 2026-10 dropped, preliminary months, duplicates removed before counting detections,
+  majority mask rule, overlapping files rejected
 - the regression recovers known `a`, `b` on synthetic data; methods ranked correctly; D chosen on a tie
 - switch from model to observed VIIRS at 2012-02; Terra-only scaling
 - consistency of the generated files for every built country (totals, bbox, intervals,

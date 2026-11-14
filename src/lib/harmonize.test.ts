@@ -24,6 +24,7 @@ interface Fixture {
   value: number[];
   estimated: number[];
   terra_only: number[];
+  viirs_det?: number[];
 }
 
 function load(code: string) {
@@ -45,10 +46,12 @@ for (const { code } of countries) {
   test(`${code}: monthly series matches Python`, () => {
     const { fx, h, n } = load(code);
     assert.equal(n, fx.value.length);
+    assert.equal(h.viirsDet === undefined, fx.viirs_det === undefined);
     assert.equal(h.firstMonth, fx.first_month);
     for (let i = 0; i < n; i++) {
       assert.equal(h.modis[i], fx.modis[i], `${code} modis ${monthStr(monthAbs(h.firstMonth) + i)}`);
       assert.equal(h.viirs[i], fx.viirs[i]);
+      if (fx.viirs_det) assert.equal(h.viirsDet![i], fx.viirs_det[i], `${code} det ${i}`);
       assert.equal(h.estimated[i], fx.estimated[i] === 1);
       assert.equal(h.terraOnly[i], fx.terra_only[i] === 1);
       const tol = 1e-6 * Math.max(1, Math.abs(fx.value[i]));
@@ -57,12 +60,16 @@ for (const { code } of countries) {
   });
 
   test(`${code}: annual sums match model.json (rounded to 0.1)`, () => {
-    const { model, h } = load(code);
+    const { model, h, n } = load(code);
+    const partial = model.annual.partial_year!;
+    assert.equal(partial.length, model.annual.years.length);
     model.annual.years.forEach((y, j) => {
       const i0 = (y - 2000) * 12;
+      const i1 = Math.min(i0 + 12, n);
       let s = 0;
-      for (let i = i0; i < i0 + 12; i++) s += h.value[i];
+      for (let i = i0; i < i1; i++) s += h.value[i];
       assert.ok(Math.abs(s - model.annual.harmonized[j]) <= 0.05 + 1e-9, `${code} ${y}: ${s}`);
+      assert.equal(partial[j], i1 - i0 < 12, `${code} ${y} partial`);
     });
   });
 
@@ -97,6 +104,18 @@ test('empty area keeps full length and gives zeros', () => {
     assert.ok(Math.abs(h.value[i] - want) < 1e-9 * want, `${i}`);
   }
   assert.ok(h.value.slice(monthAbs('2012-02') - monthAbs('2000-01')).every((v) => v === 0));
+});
+
+test('missing viirs_det means no data (undefined), present means sums', () => {
+  const base: Cells = {
+    first_month: '2000-01', cell_deg: 0.1, lat: [500, 501], lon: [200, 200], m: [0, 0], modis: [0, 0], viirs: [1, 2],
+  };
+  const model = load('PL').model;
+  const without = harmonize(monthlyTotals(base, 2), model);
+  assert.equal(without.viirsDet, undefined);
+  const withDet = monthlyTotals({ ...base, viirs_det: [3, 4] }, 2);
+  assert.deepEqual([...withDet.viirsDet!], [7, 0]);
+  assert.deepEqual([...harmonize(withDet, model).viirsDet!], [7, 0]);
 });
 
 test('keep gets cell centers in degrees', () => {

@@ -56,12 +56,15 @@ Commands:
 ## Method (decided)
 
 1. Keep only `type == 0` (vegetation). In PL ~73% of VIIRS detections are `type == 2` (industrial).
-   If a file has no `type` column (2026 data), drop detections inside an industrial mask
-   (~0.01° grid of locations with `type == 2` in 2012–2025).
+   Rows without `type` (2026 NRT rows) are dropped when their 0.01° cell was mostly industrial:
+   `type == 2` ≥ 50% of the cell's VIIRS detections in 2012–2025 (user approved; "any type 2" cut
+   24% of real PL vegetation, see `docs/validation.md` §2a). Archive rows win over NRT on shared days.
 2. Unit: **cell-days** = unique (0.1° cell, date) pairs with ≥1 detection, per sensor.
    MODIS = Terra + Aqua combined. Sensors: MODIS, VIIRS S-NPP, VIIRS NOAA-20. Ignore NOAA-21.
 3. Target scale: VIIRS S-NPP. VIIRS series = S-NPP up to 2026-11-02, after that
    NOAA-20 × factor (factor = ratio of S-NPP to NOAA-20 totals over 2018–2025).
+   Coverage currently ends 2026-10 (`LAST_COMPLETE_MONTH`, user decision): Nov 2026 is partial, so the
+   NOAA-20 switch is stored in model.json but not used yet.
 4. Model per country, calibrated on 2012–2025 monthly country totals:
    `log1p(V) = a[season] + b * log1p(M)` (seasons: DJF, MAM, JJA, SON).
    Variant D = all `a` equal; variant E = seasonal `a`. Pick by validation.
@@ -88,9 +91,9 @@ Commands:
 | File | Content |
 |---|---|
 | `countries.json` | `[{code, name, bbox: [W, S, E, N]}]` |
-| `{CC}/cells.json` | rows: lat index, lon index (0.1°), month, MODIS cell-days, VIIRS cell-days (S-NPP scale) |
-| `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share, last data date, `last_complete_month` (end of coverage, drives the "Now" panel) |
-| `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor, frp (for CSV export) |
+| `{CC}/cells.json` | rows: lat index, lon index (0.1°), month, MODIS cell-days, VIIRS cell-days (S-NPP scale), `viirs_det` raw S-NPP detections (display only; missing = no data) |
+| `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share (files 2000–2025), last data date, `last_complete_month` (= 2026-10, drives the "Now" panel), `preliminary` months, `coverage` (raw file dates per satellite), `annual.partial_year`, `hotspots` flag, `hotspot_sensors` per year, `industrial_mask` stats |
+| `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor (Terra/Aqua/SNPP/N20), frp (for CSV export). Only PL, PT, ES, GR, UA, CL (AU/CA too big for Pages → link to FIRMS). 2026 = VIIRS only |
 
 Keep files small: compact arrays, no pretty printing. Check size before committing
 (GitHub limit 100 MB per file).

@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from build_data import file_year, raw_files, read_file
-from config import CACHE_DIR, CALIB_EXCLUDE, CALIB_YEARS, LAST_YEAR_STAGE1, SEASON_OF_MONTH
+from config import CACHE_DIR, CALIB_EXCLUDE, CALIB_YEARS, HIST_LAST_YEAR, SEASON_OF_MONTH
 from model import validate
 
 GRIDS = [0.05, 0.1, 0.25]
@@ -27,10 +27,10 @@ FIRST_V = pd.Period("2012-02", "M")  # first full S-NPP month (as in stage 2)
 
 
 def load_points(code: str) -> pd.DataFrame:
-    """Type-0 detections of Terra, Aqua, S-NPP up to LAST_YEAR_STAGE1 (NOAA-20 not needed)."""
+    """Type-0 detections of Terra, Aqua, S-NPP up to HIST_LAST_YEAR (NOAA-20 not needed)."""
     parts = []
     for f in raw_files(code):
-        if (file_year(f) or 0) > LAST_YEAR_STAGE1:
+        if (file_year(f) or 0) > HIST_LAST_YEAR:
             continue
         df = read_file(f)
         df = df[(df["type"] == 0) & df["sat"].isin(["Terra", "Aqua", "SNPP"])]

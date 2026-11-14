@@ -8,7 +8,8 @@ OUT_DIR = ROOT / "public" / "data"
 CACHE_DIR = ROOT / "pipeline" / "cache"  # intermediate cell-day tables (gitignored)
 
 FIRST_MONTH = "2000-01"   # month index 0 in cells.json
-LAST_YEAR_STAGE1 = 2025   # 2026 files (NRT rows without `type`) are handled in stage 4
+HIST_LAST_YEAR = 2025       # frozen end of the historical period (mask, filter stats, calibration)
+LAST_COMPLETE_MONTH = "2026-10"  # end of coverage; later rows are dropped (Nov 2026 is partial)
 
 ENCODING = "utf-8"
 
@@ -25,7 +26,14 @@ COUNTRIES = {
 }
 
 CELL_DEG = 0.1                # aggregation grid
-INDUSTRIAL_MASK_DEG = 0.01    # grid for the industrial mask (files without `type`)
+INDUSTRIAL_MASK_DEG = 0.01    # grid for the industrial mask (rows without `type`)
+INDUSTRIAL_MASK_YEARS = (2012, HIST_LAST_YEAR)  # VIIRS type == 2 locations used for the mask
+# A 0.01° cell is masked when type == 2 is the majority of its VIIRS detections (user approved:
+# "any type 2" cut 24% of real PL vegetation detections in the 2026 archive test).
+INDUSTRIAL_MASK_MIN_SHARE = 0.5
+
+# Countries with hotspot CSV files for export (AU and CA are too large for GitHub Pages).
+HOTSPOT_COUNTRIES = ["PL", "PT", "ES", "GR", "UA", "CL"]
 CALIB_YEARS = (2012, 2025)    # model calibration period
 N20_FACTOR_YEARS = (2018, 2025)
 SNPP_LAST_DATE = "2026-11-02"  # after this date VIIRS series = NOAA-20 x factor

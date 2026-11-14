@@ -28,6 +28,8 @@ def country_series(code: str) -> tuple[pd.DataFrame, dict]:
     viirs = np.bincount(m[keep], weights=np.asarray(cells["viirs"])[keep], minlength=len(months))
     # Terra-only months have no Aqua data, so MODIS = Terra there.
     ms = pd.DataFrame({"MODIS": modis, "SNPP": viirs, "Terra": modis}, index=months)
+    if "viirs_det" in cells:
+        ms["DET"] = np.bincount(m[keep], weights=np.asarray(cells["viirs_det"])[keep], minlength=len(months))
     return ms, model
 
 
@@ -41,6 +43,7 @@ def build(code: str) -> dict:
         "value": [float(v) for v in hm["harmonized"]],
         "estimated": hm["estimated"].astype(int).tolist(),
         "terra_only": hm["terra_only"].astype(int).tolist(),
+        **({"viirs_det": ms["DET"].astype(int).tolist()} if "DET" in ms else {}),
     }
 
 
