@@ -15,6 +15,7 @@ COUNTRIES = {
     "ES": "Spain",
     "GR": "Greece",
     "UA": "Ukraine",
+    "AU": "Australia",
 }
 
 CELL_DEG = 0.1                # aggregation grid
