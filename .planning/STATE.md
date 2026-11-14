@@ -7,7 +7,7 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **5 in progress**: 5a (area validation), 5b (TS logic), 5c steps 1–4 (area/presets/period, CSV export, top 10 anomalies, annual chart) done and pushed; left: **Leaflet polygon** (5c step 5)
+- Stage: **5 done** (area validation, TS logic, area/presets/period, CSV export, anomalies with k ≥ 2, annual chart, Leaflet polygon drawing), next: **6**
 - Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
   `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
   and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
@@ -19,11 +19,9 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. Stage 5c step 5: Leaflet 1.9.4 map, own click-to-draw polygon (plan: ~/.claude/plans/zaplanuj-etap-5-tranquil-island.md). Then stage 6.
+1. Stage 6: raw/harmonized toggle, season profile, briefing, Method page (use `model.area` + validation.md §9b).
 
 ## Blockers / open questions
-
-- Small areas: anomaly ranking dominated by months with median 0 (k ≥ 0.5), e.g. Biebrza Apr 2020 not in top 10 (ask user if k should change)
 
 - PT backtest systematic underestimate (−26%, every year): not smearing; likely drift between 2012–18 and 2019–25. Mention as limitation
 

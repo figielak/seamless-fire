@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { midRankPercentile, monthStats, quantile } from './stats.ts';
+import { K_MIN, midRankPercentile, monthStats, quantile } from './stats.ts';
 import type { Harmonized } from './harmonize.ts';
 
 /** Synthetic series from 2000-01; f(year, calMonth0) -> value. */
@@ -57,8 +57,8 @@ test('zero median: k keeps the ratio finite', () => {
   const h = series(2025, (y, m) => (y === 2025 && m === 11 ? 4 : 0));
   const s = monthStats(h, h.value.length - 1);
   assert.equal(s.median, 0);
-  assert.equal(s.k, 0.5); // all medians 0 -> K_MIN
-  assert.equal(s.ratio, (4 + 0.5) / 0.5);
+  assert.equal(s.k, K_MIN); // all medians 0 -> K_MIN
+  assert.equal(s.ratio, (4 + K_MIN) / K_MIN);
 });
 
 test('k = 0.1 x mean of monthly medians', () => {

@@ -2,7 +2,7 @@
 // Definitions (see .planning/DECISIONS.md):
 // - reference period: the 10 complete calendar years before the month's year
 //   (2025-12 -> 2015..2024); low-quality and preliminary months are left out
-// - k = max(0.5, 0.1 * mean of the 12 calendar-month medians of that period and area)
+// - k = max(2, 0.1 * mean of the 12 calendar-month medians of that period and area)
 // - anomaly = (x + k) / (median + k); historical spread = P10..P90 of the same month in the period
 // - percentile: same calendar month in all years of the series (low-quality and preliminary
 //   months left out, the month itself always included), ties as mid-rank
@@ -13,7 +13,7 @@ import { monthAbs, monthStr, type Harmonized } from './harmonize.ts';
 export const REF_YEARS = 10;
 export const MIN_REF_YEARS = 5;
 export const K_FRACTION = 0.1;
-export const K_MIN = 0.5;
+export const K_MIN = 2; // user decision 2026-11-14: 0.5 let single cell-days dominate small-area rankings
 
 export interface MonthStats {
   month: string;

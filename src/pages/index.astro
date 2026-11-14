@@ -38,6 +38,17 @@ import Base from '../layouts/Base.astro';
       <p id="area-note" class="note"></p>
     </div>
 
+    <div class="map-wrap">
+      <div class="row map-tools">
+        <button type="button" id="draw">Draw polygon</button>
+        <button type="button" id="draw-finish" hidden>Finish</button>
+        <button type="button" id="draw-undo" hidden>Undo point</button>
+        <button type="button" id="draw-cancel" hidden>Cancel</button>
+        <span id="draw-hint" class="note"></span>
+      </div>
+      <div id="map" class="map" aria-label="Map of the selected area"></div>
+    </div>
+
     <div class="row period">
       <span class="lbl">Period</span>
       <label>From <select id="from-m" class="small"></select><select id="from-y" class="small"></select></label>
@@ -145,6 +156,16 @@ import Base from '../layouts/Base.astro';
     display: inline-flex;
     gap: 0.3rem;
     align-items: center;
+  }
+  .map {
+    height: 340px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 0.8rem;
+    z-index: 0;
+  }
+  .map-tools {
+    margin-bottom: 0.4rem !important;
   }
   .annual {
     width: 100%;
@@ -262,6 +283,7 @@ import Base from '../layouts/Base.astro';
   let lastCustom: AreaSpec | null = null; // restored when switching back to "Custom area"
   let current: { country: Country; d: CountryData; h: Harmonized; fromIdx: number; toIdx: number } | null = null;
   let exportJob: AbortController | null = null;
+  let areaMap: import('../lib/map').AreaMap | null = null;
   let plotlyPromise: Promise<typeof import('plotly.js-dist-min')['default']> | null = null;
 
   function plotly() {
@@ -647,15 +669,16 @@ import Base from '../layouts/Base.astro';
     const shape = custom ? resolveShape(state.area) : null;
     const bb = shape ? shapeBBox(shape) : country.bbox;
     const f = rectForm.elements as unknown as Record<'w' | 's' | 'e' | 'n', HTMLInputElement>;
-    if (!shape || shape.kind === 'rect') {
-      [f.w.value, f.s.value, f.e.value, f.n.value] = bb.map((v) => String(Math.round(v * 100) / 100));
-    }
+    // For a polygon the inputs show its bounding box (Apply turns it into that rectangle).
+    [f.w.value, f.s.value, f.e.value, f.n.value] = bb.map((v) => String(Math.round(v * 100) / 100));
     const notes: string[] = [];
     if (state.area.kind === 'preset') {
       const p = PRESETS.find((x) => x.id === (state.area as { id: string }).id);
       if (p) notes.push(escapeHtml(p.note));
     }
-    if (shape?.kind === 'polygon' && state.area.kind === 'shape') notes.push('Custom polygon from the link.');
+    if (shape?.kind === 'polygon' && state.area.kind === 'shape') {
+      notes.push(`Polygon with ${shape.ring.length} points (drawn on the map).`);
+    }
     if (shape && !bboxOverlap(shapeBBox(shape), country.bbox)) {
       notes.push(`<span class="warn">This area is outside ${escapeHtml(country.name)}: all values are 0.</span>`);
     }
@@ -712,6 +735,7 @@ import Base from '../layouts/Base.astro';
       syncControls(country);
 
       current = { country, d, h, fromIdx, toIdx };
+      areaMap?.show(country.code, country.bbox, shape);
       renderNow(country, d, h);
       renderAnomalies(h, fromIdx, toIdx);
       updateExportNote();
@@ -741,6 +765,44 @@ import Base from '../layouts/Base.astro';
     show().then(() => {
       if (p.error) status.textContent = `Part of the link was ignored: ${p.error}`;
     });
+  }
+
+  // ------------------------------------------------------------------ map (loaded after the first chart)
+
+  async function initMap() {
+    const btnDraw = $<HTMLButtonElement>('draw');
+    const btnFinish = $<HTMLButtonElement>('draw-finish');
+    const btnUndo = $<HTMLButtonElement>('draw-undo');
+    const btnCancel = $<HTMLButtonElement>('draw-cancel');
+    const hint = $('draw-hint');
+    btnDraw.disabled = true;
+    try {
+      const { AreaMap } = await import('../lib/map');
+      areaMap = new AreaMap($('map'), {
+        onPolygon: (ring) => setState({ area: { kind: 'shape', shape: { kind: 'polygon', ring } } }),
+        onDrawState: (drawing, points) => {
+          btnDraw.hidden = drawing;
+          btnFinish.hidden = btnUndo.hidden = btnCancel.hidden = !drawing;
+          btnFinish.disabled = points < 3;
+          btnUndo.disabled = points === 0;
+          hint.textContent = drawing
+            ? `Click to add points (${points}). Double-click or Finish to close the polygon.`
+            : 'Or pick an example / enter a rectangle.';
+        },
+      });
+      btnDraw.addEventListener('click', () => areaMap!.startDrawing());
+      btnFinish.addEventListener('click', () => areaMap!.finish());
+      btnUndo.addEventListener('click', () => areaMap!.undo());
+      btnCancel.addEventListener('click', () => areaMap!.cancelDrawing());
+      btnDraw.disabled = false;
+      hint.textContent = 'Or pick an example / enter a rectangle.';
+      if (current) areaMap.show(current.country.code, current.country.bbox, resolveShape(state.area));
+    } catch (err) {
+      console.error(err);
+      $('map').hidden = true;
+      btnDraw.hidden = true;
+      hint.textContent = 'Map could not be loaded; use the rectangle inputs.';
+    }
   }
 
   async function init() {
@@ -805,6 +867,7 @@ import Base from '../layouts/Base.astro';
     dlCancel.addEventListener('click', () => exportJob?.abort());
     window.addEventListener('hashchange', applyHash);
     applyHash();
+    initMap();
   }
 
   init();
