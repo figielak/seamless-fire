@@ -1,0 +1,31 @@
+---
+interface Props {
+  title?: string;
+}
+const { title = 'Seamless Fire' } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Harmonized MODIS + VIIRS burning activity calendar, 2000 to today." />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href={base}>Calendar</a>
+        <a href={`${base}method/`}>Method</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>Data: NASA FIRMS (MODIS, VIIRS). Code: Apache 2.0.</p>
+    </footer>
+  </body>
+</html>

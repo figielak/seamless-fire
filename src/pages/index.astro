@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Seamless Fire">
+  <h1>Seamless Fire</h1>
+  <p>Harmonized MODIS + VIIRS burning activity calendar, 2000 to today.</p>
+  <p id="status">Loading countries…</p>
+</Base>
+
+<script>
+  import { fetchJson, type Country } from '../lib/data';
+
+  const status = document.getElementById('status')!;
+  fetchJson<Country[]>('countries.json')
+    .then((list) => {
+      status.textContent = `Countries: ${list.map((c) => c.name).join(', ')}`;
+    })
+    .catch(() => {
+      status.textContent = 'No data yet. Run: python pipeline/build_data.py';
+    });
+</script>
