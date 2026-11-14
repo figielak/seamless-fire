@@ -8,6 +8,14 @@ Full context:
 - `docs/plan.md`: method decisions, data contract, pages, work order, submission checklist
 - `docs/koncepcja.md`: product concept, users, differentiators (Polish)
 
+## Working memory: `.planning/`
+
+- **Read `.planning/STATE.md` at the start of every session** (current stage, next step, blockers).
+- `STATE.md`: short snapshot, overwrite it after finishing a stage or when the next step changes.
+- `DECISIONS.md`: append-only log of decisions, findings (actual sanity numbers, chosen model D/E),
+  and data gotchas found during the event. 1–3 lines per entry, with the reason.
+- Keep both short. Do not duplicate this file or `docs/plan.md`; no step-by-step history.
+
 ## Hard constraints
 
 - **Deadline: Sunday 15.11.2026, 13:00 Europe/Warsaw.** Local judging starts then.
