@@ -79,3 +79,77 @@ export function cellLookup(layer: CellLayer): (lat: number, lon: number) => numb
     return idx.get((li + 10_000) * 100_000 + (lj + 50_000)) ?? 0;
   };
 }
+
+/** {CC}/recurrence/meta.json (pipeline write_recurrence). */
+export interface RecurrenceMeta {
+  cell_deg: number;
+  first_month: string; // "YYYY-MM", first month counted
+  last_month: string;
+  excluded: string[]; // months left out (S-NPP outage)
+  months: number; // all months counted
+  years: number[]; // per calendar month (0 = Jan): years counted
+  min_years: number; // cells with fewer years with fire are not in the month files
+  year_round_rule: { min_share: number; min_cal_months: number };
+  // Year-round fire (likely industrial): grid indices, share of all counted months, calendar months.
+  year_round: { lat: number[]; lon: number[]; share: number[]; cal: number[] };
+}
+
+/** {CC}/recurrence/mNN.json: years with >= 1 S-NPP vegetation detection per 0.01° cell. */
+export interface RecurrenceMonth {
+  lat: number[]; // grid indices, cell = [lat * cell_deg, (lat + 1) * cell_deg)
+  lon: number[];
+  n: number[];
+}
+
+export interface RecurrenceLayer extends CellLayer {
+  years: number; // years counted (denominator)
+  firstYear: number;
+  lastYear: number;
+}
+
+/**
+ * Recurrence of one calendar month (0 = Jan): per 0.01° cell, the percentage of years with at least
+ * one S-NPP vegetation detection in that month. Full VIIRS record (not limited by the date range).
+ */
+export function recurrenceLayer(meta: RecurrenceMeta, data: RecurrenceMonth, calMonth: number): RecurrenceLayer {
+  const years = meta.years[calMonth] ?? 0;
+  const size = years ? data.n.length : 0;
+  const [fy, fm] = meta.first_month.split('-').map(Number);
+  const [ly, lm] = meta.last_month.split('-').map(Number);
+  const out: RecurrenceLayer = {
+    lat: new Int32Array(size),
+    lon: new Int32Array(size),
+    value: new Float64Array(size),
+    cellDeg: meta.cell_deg,
+    max: 0,
+    total: 0,
+    estimatedMonths: 0,
+    months: years,
+    years,
+    firstYear: calMonth + 1 >= fm ? fy : fy + 1,
+    lastYear: calMonth + 1 <= lm ? ly : ly - 1,
+  };
+  for (let j = 0; j < size; j++) {
+    const v = (100 * Math.min(data.n[j], years)) / years;
+    out.lat[j] = data.lat[j];
+    out.lon[j] = data.lon[j];
+    out.value[j] = v;
+    out.max = Math.max(out.max, v);
+    out.total += v;
+  }
+  return out;
+}
+
+export interface YearRoundCell {
+  lat: number; // cell centre, degrees
+  lon: number;
+  share: number; // share of all counted months with fire
+  cal: number; // calendar months with fire
+}
+
+/** Year-round fire cells of meta.json as cell centres. */
+export function yearRoundCells(meta: RecurrenceMeta): YearRoundCell[] {
+  const d = meta.cell_deg;
+  const y = meta.year_round;
+  return y.lat.map((la, i) => ({ lat: (la + 0.5) * d, lon: (y.lon[i] + 0.5) * d, share: y.share[i], cal: y.cal[i] }));
+}

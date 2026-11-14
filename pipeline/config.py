@@ -32,6 +32,18 @@ INDUSTRIAL_MASK_YEARS = (2012, HIST_LAST_YEAR)  # VIIRS type == 2 locations used
 # "any type 2" cut 24% of real PL vegetation detections in the 2026 archive test).
 INDUSTRIAL_MASK_MIN_SHARE = 0.5
 
+# Fire recurrence map layer ({CC}/recurrence.json): per 0.01° cell and calendar month, the number
+# of years with >= 1 S-NPP vegetation detection. S-NPP only (one sensor over the whole record);
+# first full S-NPP month to LAST_COMPLETE_MONTH, S-NPP outage months left out.
+RECURRENCE_DEG = 0.01
+RECURRENCE_FIRST_MONTH = "2012-02"
+RECURRENCE_MIN_YEARS = 2          # cells with fire in a single year are not written (size: AU)
+# "Year-round fire" (likely an industrial source FIRMS did not flag as type 2): fire in at least
+# this share of all counted months and in at least this many different calendar months.
+# PL top cells: coke plants, refineries, steelworks; the month rule keeps seasonal burning out.
+YEAR_ROUND_MIN_SHARE = 0.10
+YEAR_ROUND_MIN_CAL_MONTHS = 9
+
 # Countries with hotspot CSV files for export (AU and CA are too large for GitHub Pages).
 HOTSPOT_COUNTRIES = ["PL", "PT", "ES", "GR", "UA", "CL"]
 CALIB_YEARS = (2012, 2025)    # model calibration period
@@ -41,7 +53,8 @@ SNPP_LAST_DATE = "2026-11-02"  # after this date VIIRS series = NOAA-20 x factor
 SENSORS = ("MODIS", "SNPP", "N20")
 
 # Sensor outages: excluded from calibration and flagged in the calendar.
-CALIB_EXCLUDE = ["2020-08", "2020-09", "2022-07", "2022-08"]  # Aqua FMU failure, S-NPP outage
+SNPP_OUTAGE = ["2022-07", "2022-08"]
+CALIB_EXCLUDE = ["2020-08", "2020-09"] + SNPP_OUTAGE  # Aqua FMU failure, S-NPP outage
 LOW_QUALITY = [f"2000-{m:02d}" for m in range(1, 11)] + CALIB_EXCLUDE  # + Terra early 2000
 
 # Calendar month (1..12) -> season index: DJF=0, MAM=1, JJA=2, SON=3

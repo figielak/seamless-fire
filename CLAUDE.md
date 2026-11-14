@@ -98,6 +98,7 @@ Commands:
 | `countries.json` | `[{code, name, bbox: [W, S, E, N]}]` |
 | `{CC}/cells.json` | rows: lat index, lon index (0.1°), month, MODIS cell-days, VIIRS cell-days (S-NPP scale), `viirs_det` raw S-NPP detections (display only; missing = no data) |
 | `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share (files 2000–2025), last data date, `last_complete_month` (= 2026-10, drives the "Now" panel), `preliminary` months, `coverage` (raw file dates per satellite), `annual.partial_year` (2012 interval = observed + estimated-month interval), `hotspots` flag, `hotspot_sensors` per year, `industrial_mask` stats, `area` (custom-area check, `h_month`, `h_annual`) |
+| `{CC}/recurrence/` | `meta.json` (0.01° grid, counted months, `years[mo]`, `year_round` cells = likely industrial) + `m01..m12.json` (lat, lon index at 0.01°, `n` = years with ≥1 S-NPP type-0 detection, n ≥ 2). Map mode "Recurrence" |
 | `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor (Terra/Aqua/SNPP/N20), frp (for CSV export). Only PL, PT, ES, GR, UA, CL (AU/CA too big for Pages → link to FIRMS). 2026 = VIIRS only |
 
 Keep files small: compact arrays, no pretty printing. Check size before committing

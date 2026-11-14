@@ -5,7 +5,16 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { normalizeRing, shapeBBox, type BBox, type LonLat, type Shape } from './geo.ts';
-import { cellLookup, type CellLayer } from './cellmap.ts';
+import { cellLookup, type CellLayer, type YearRoundCell } from './cellmap.ts';
+
+// Ring around a year-round fire cell (likely industrial): cyan, hollow, visible at any zoom.
+// Small at country/world zoom (hundreds of rings in AU and "All countries"), larger when zoomed in.
+function ringStyle(zoom: number): L.CircleMarkerOptions {
+  return {
+    radius: zoom >= 9 ? 7 : zoom >= 6 ? 4.5 : 2.5, weight: zoom >= 6 ? 2 : 1.2,
+    color: '#22d3ee', fill: true, fillOpacity: 0, opacity: 0.95,
+  };
+}
 
 // Map view per country when the data bbox is a poor view (PT includes Azores and Madeira).
 const VIEW: Record<string, BBox> = { PT: [-9.6, 36.9, -6.1, 42.2] };
@@ -63,6 +72,17 @@ export function fireAlpha(t: number): number {
 /** Log colour position of a value: log1p(v) / log1p(max). */
 export const fireT = (v: number, max: number) => (max > 0 ? Math.log1p(v) / Math.log1p(max) : 0);
 
+/** Colour scale of a cell layer: fixed [0, max], log by default; `linear` for percentages. */
+export interface CellScale {
+  max: number;
+  unit: string;
+  linear?: boolean;
+  ticks?: number[]; // legend ticks between 0 and max (default 1, 3, 10)
+  format?: (v: number) => string; // hover value (default: number)
+}
+
+const scaleT = (v: number, sc: CellScale) => (sc.linear ? (sc.max > 0 ? v / sc.max : 0) : fireT(v, sc.max));
+
 const LUT_SIZE = 256;
 const FIRE_LUT: Uint8Array = (() => {
   const lut = new Uint8Array(LUT_SIZE * 3);
@@ -95,23 +115,28 @@ class CellCanvas extends L.Layer {
   smooth = true;
 
   /** Colours on a fixed scale [0, max] (same for every country); larger values get the top colour. */
-  setData(data: CellLayer | null, max: number) {
+  setData(data: CellLayer | null, sc: CellScale) {
     this.data = data;
     this.colors = [];
     this.grid = null;
     if (data && data.value.length) {
       let [la0, la1, lo0, lo1] = [Infinity, -Infinity, Infinity, -Infinity];
       for (let j = 0; j < data.value.length; j++) {
-        const t = fireT(data.value[j], max);
+        const t = scaleT(data.value[j], sc);
         this.colors.push(fireColor(t).replace('rgb(', 'rgba(').replace(')', `,${fireAlpha(t).toFixed(3)})`));
         la0 = Math.min(la0, data.lat[j]); la1 = Math.max(la1, data.lat[j]);
         lo0 = Math.min(lo0, data.lon[j]); lo1 = Math.max(lo1, data.lon[j]);
       }
       const rows = la1 - la0 + 1;
       const cols = lo1 - lo0 + 1;
+      // Very wide fine grids (0.01° over several countries): skip smooth mode, draw squares.
+      if (rows * cols > 30e6) {
+        if (this._map) this.redraw();
+        return;
+      }
       const q = new Uint8Array(rows * cols);
       for (let j = 0; j < data.value.length; j++) {
-        const t = Math.min(Math.max(fireT(data.value[j], max), 0), 1);
+        const t = Math.min(Math.max(scaleT(data.value[j], sc), 0), 1);
         q[(data.lat[j] - la0) * cols + (data.lon[j] - lo0)] = 1 + Math.round(t * 254);
       }
       this.grid = { q, lat0: la0, lon0: lo0, rows, cols };
@@ -246,10 +271,17 @@ export class AreaMap {
   private cells = new CellCanvas();
   private legend: HTMLElement;
   private lookup: ((lat: number, lon: number) => number) | null = null;
-  private layerInfo: { title: string; unit: string; max: number; empty: boolean } | null = null;
+  private layerInfo: { title: string; scale: CellScale; empty: boolean } | null = null;
+  private cellDeg = 0.1;
   private hotRenderer = L.canvas({ padding: 0.3 });
   private hotLayer = L.layerGroup();
   private hotNote = '';
+  // Year-round fire cells (likely industrial), recurrence view only: ring markers.
+  private ringRenderer = L.canvas({ padding: 0.3 });
+  private ringLayer = L.layerGroup();
+  private ringNote = '';
+  private rings = new Map<string, YearRoundCell>();
+  private ringDeg = 0.01;
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
     this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
@@ -268,12 +300,17 @@ export class AreaMap {
     satellite.addTo(this.map);
     this.cells.addTo(this.map);
     this.hotLayer.addTo(this.map);
+    this.ringLayer.addTo(this.map);
     L.control.layers(
       { Satellite: satellite, 'Street map': osm },
-      { 'Fire cells': this.cells, 'Hotspot points': this.hotLayer },
+      { 'Fire cells': this.cells, 'Hotspot points': this.hotLayer, 'Year-round fire': this.ringLayer },
       { position: 'topright' },
     ).addTo(this.map);
-    this.map.on('zoomend', () => this.styleHotspots());
+    this.map.on('zoomend', () => {
+      this.styleHotspots();
+      const st = ringStyle(this.map.getZoom());
+      this.ringLayer.eachLayer((l) => (l as L.CircleMarker).setStyle(st).setRadius(st.radius!));
+    });
 
     const Legend = L.Control.extend({
       onAdd: () => {
@@ -308,10 +345,11 @@ export class AreaMap {
    * Fire cell layer on a fixed colour scale [0, scale.max] shared by all countries.
    * Title says what it shows (month or period, observed or estimated); unit labels the values.
    */
-  setCells(layer: CellLayer | null, title: string, scale: { max: number; unit: string }) {
-    this.cells.setData(layer, scale.max);
+  setCells(layer: CellLayer | null, title: string, scale: CellScale) {
+    this.cells.setData(layer, scale);
     this.lookup = layer ? cellLookup(layer) : null;
-    this.layerInfo = { title, unit: scale.unit, max: scale.max, empty: !layer || layer.value.length === 0 };
+    this.cellDeg = layer?.cellDeg ?? 0.1;
+    this.layerInfo = { title, scale, empty: !layer || layer.value.length === 0 };
     this.hover(null);
   }
 
@@ -330,6 +368,31 @@ export class AreaMap {
         .addTo(this.hotLayer);
     }
     this.hover(null);
+  }
+
+  /**
+   * Year-round fire cells (null = none): fire in many months of every season, usually an industrial
+   * source FIRMS did not flag. `note` is the legend line; `deg` the grid of the cells.
+   */
+  setYearRound(cells: YearRoundCell[] | null, note: string, deg = 0.01) {
+    this.ringLayer.clearLayers();
+    this.rings.clear();
+    this.ringNote = note;
+    this.ringDeg = deg;
+    for (const c of cells ?? []) {
+      this.rings.set(this.ringKey(c.lat, c.lon), c);
+      L.circleMarker([c.lat, c.lon], { renderer: this.ringRenderer, ...ringStyle(this.map.getZoom?.() ?? 6) })
+        .bindPopup(`<b>Year-round fire</b>, likely industrial<br>Fire in ${Math.round(c.share * 100)}% of all months, ` +
+          `${c.cal} of 12 calendar months<br>${c.lat.toFixed(3)}°, ${c.lon.toFixed(3)}° (0.01° cell)<br>` +
+          `<span class="pop-note">Not typical of vegetation fires. Check the site before treating it as fire risk.</span>`)
+        .addTo(this.ringLayer);
+    }
+    this.hover(null);
+  }
+
+  private ringKey(lat: number, lon: number) {
+    const d = this.ringDeg;
+    return `${Math.floor(lat / d + 1e-9)},${Math.floor(lon / d + 1e-9)}`;
   }
 
   private hotStyle(): L.CircleMarkerOptions {
@@ -353,8 +416,9 @@ export class AreaMap {
   private hover(ll: L.LatLng | null) {
     if (!this.layerInfo) return;
     this.legend.hidden = false;
-    const { title, unit, max, empty } = this.layerInfo;
-    const ticks = [1, 3, 10].filter((t) => t < max * 0.8);
+    const { title, scale, empty } = this.layerInfo;
+    const { unit, max } = scale;
+    const ticks = (scale.ticks ?? [1, 3, 10]).filter((t) => t < max * 0.8);
     const ramp = Array.from({ length: 11 }, (_, i) => {
       const c = fireColor(i / 10);
       return c.replace('rgb(', 'rgba(').replace(')', `,${Math.max(fireAlpha(i / 10), 0.12).toFixed(2)})`);
@@ -363,20 +427,26 @@ export class AreaMap {
     if (ll && this.lookup) {
       const v = this.lookup(ll.lat, ll.lng);
       // cell centre, e.g. "23.35°S 2.95°W"
-      const lat = Math.floor(ll.lat * 10 + 1e-9) / 10 + 0.05;
-      const lon = Math.floor(ll.lng * 10 + 1e-9) / 10 + 0.05;
-      const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}°${v < 0 ? neg : pos}`;
+      const step = this.cellDeg;
+      const lat = (Math.floor(ll.lat / step + 1e-9) + 0.5) * step;
+      const lon = (Math.floor(ll.lng / step + 1e-9) + 0.5) * step;
+      const dp = step < 0.05 ? 3 : 2;
+      const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(dp)}°${v < 0 ? neg : pos}`;
       cell = `${deg(lat, 'N', 'S')} ${deg(lon, 'E', 'W')}: ` +
-        `<b>${v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
+        `<b>${scale.format ? scale.format(v) : v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
+      const ring = this.rings.size ? this.rings.get(this.ringKey(ll.lat, ll.lng)) : undefined;
+      if (ring) cell += `<br><span class="lg-ringtxt">Year-round fire (${Math.round(ring.share * 100)}% of all months): likely industrial</span>`;
     }
     this.legend.innerHTML = `<div class="lg-title">${title}</div>
         <div class="lg-bar" style="background-image:linear-gradient(90deg,${ramp})"></div>
         <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
-          `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
-          <span style="left:100%">${max}+</span></div>
+          `<span style="left:${(scaleT(t, scale) * 100).toFixed(1)}%">${t}</span>`).join('')}
+          <span style="left:100%">${max}${scale.linear ? '' : '+'}</span></div>
         <div class="lg-unit">${unit}</div>
         ${this.hotNote && this.map.hasLayer(this.hotLayer)
           ? `<div class="lg-hot"><span class="lg-dot"></span>${this.hotNote}</div>` : ''}
+        ${this.ringNote && this.map.hasLayer(this.ringLayer)
+          ? `<div class="lg-hot"><span class="lg-ring"></span>${this.ringNote}</div>` : ''}
         <div class="lg-cell">${empty ? 'No fire cells in this selection' : cell}</div>`;
   }
 

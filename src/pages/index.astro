@@ -73,15 +73,16 @@ import Base from '../layouts/Base.astro';
           <summary>Map layer</summary>
           <fieldset class="seg">
             <legend class="sr-only">Map shows</legend>
-            <label><input type="radio" name="mapmode" value="month" checked autocomplete="off" /><span>One month</span></label>
-            <label><input type="radio" name="mapmode" value="period" autocomplete="off" /><span>Whole period</span></label>
+            <label><input type="radio" name="mapmode" value="month" checked autocomplete="off" /><span>Month</span></label>
+            <label><input type="radio" name="mapmode" value="period" autocomplete="off" /><span>Period</span></label>
+            <label title="Where fires come back: share of years with fire in the cell, for one calendar month"><input type="radio" name="mapmode" value="recur" autocomplete="off" /><span>Recurrence</span></label>
           </fieldset>
           <div class="row month-step" id="month-step">
             <button type="button" id="map-prev" class="icon" title="Previous month">‹</button>
             <span id="map-month" class="map-month">—</span>
             <button type="button" id="map-next" class="icon" title="Next month">›</button>
           </div>
-          <label class="check"><input type="checkbox" id="show-hot" checked autocomplete="off" /> Hotspot points (one month)</label>
+          <label class="check"><input type="checkbox" id="show-hot" checked autocomplete="off" /> Hotspot points (Month view)</label>
           <div class="sub-row"><span class="sub-lbl">Rendering</span>
           <div class="view-toggle small-toggle" role="group" aria-label="Map rendering">
             <button type="button" data-smooth="1" aria-pressed="true" title="Colours blended between cell centres">Smooth</button>
@@ -166,6 +167,17 @@ import Base from '../layouts/Base.astro';
               by their MODIS cell-days. Colours use one log scale for all countries; cells below about
               0.5 cell-days fade out. <i>Smooth</i> blends colours between cell centres, <i>Cells</i> shows
               one square per 0.1° cell.
+            </li>
+            <li>
+              <b>Recurrence</b> (map layer): where fires come back. For one calendar month, each 0.01° cell
+              (about 1 km) shows the share of years with at least one VIIRS S-NPP vegetation detection,
+              e.g. "8 of 15 Aprils". It uses the whole S-NPP record (Feb 2012 – Oct 2026, the Jul–Aug 2022
+              outage left out), not the selected period; MODIS is not used (coarser, misses small fires).
+              Cells with fire in only one year are not shown. <b>Cyan rings</b> mark year-round fire:
+              fire in at least 10% of all months and in at least 9 of the 12 calendar months. Vegetation
+              burning is seasonal, so these are usually industrial sites (steelworks, coke plants,
+              refineries) that FIRMS did not flag as such. This shows past patterns, not a fire danger
+              forecast: weather and fuel are not included.
             </li>
             <li>
               Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
@@ -868,6 +880,17 @@ import Base from '../layouts/Base.astro';
     background: #fff;
     border: 1.2px solid #0b1a2b;
   }
+  .map-legend .lg-ring {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px solid #22d3ee;
+    background: #0b1a2b;
+  }
+  .map-legend .lg-ringtxt {
+    color: #0e7490;
+  }
   .map-legend .lg-cell {
     margin-top: 0.2rem;
     border-top: 1px solid #d0d7de;
@@ -933,7 +956,9 @@ import Base from '../layouts/Base.astro';
   } from '../lib/geo';
   import { monthStats, topAnomalies } from '../lib/stats';
   import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
-  import { cellLayer } from '../lib/cellmap';
+  import {
+    cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
+  } from '../lib/cellmap';
   import type { Hotspot } from '../lib/map';
   import { WORLD_CODE, mergeLayers, sumAnnual, sumSeries, unionBBox, worldModel } from '../lib/world';
 
@@ -948,6 +973,14 @@ import Base from '../layouts/Base.astro';
     month: { max: 31, unit: 'cell-days per 0.1° cell' },
     period: { max: 30, unit: 'cell-days per 0.1° cell per year' },
     short: { max: 31, unit: 'cell-days per 0.1° cell, total in the period' },
+    // Linear 0–100%: share of the years in which the ~1 km cell had ≥1 S-NPP detection that month.
+    recur: (years: number, name: string, minYears = 2) => ({
+      max: 100,
+      linear: true,
+      ticks: [25, 50, 75],
+      unit: `% of ${name}s with fire in the 0.01° cell (~1 km, VIIRS S-NPP); fire in only ${minYears - 1} year not shown`,
+      format: (v: number) => `${Math.round(v)}% (${Math.round((v * years) / 100)} of ${years} ${name}s)`,
+    }),
   };
   // Calendar "vs typical" mode: log2 of the anomaly ratio, clipped to ¼…4×; white = typical.
   const ANOM_LOG2 = 2;
@@ -992,7 +1025,9 @@ import Base from '../layouts/Base.astro';
     country: Country; d: CountryData; h: Harmonized; hc: Harmonized; fromIdx: number; toIdx: number;
     parts?: { d: CountryData; hc: Harmonized; h: Harmonized }[]; // "All countries": per-country results
   } | null = null;
-  let mapMode: 'month' | 'period' = 'month';
+  type MapMode = 'month' | 'period' | 'recur';
+  let mapMode: MapMode = 'month';
+  let recMonth = 3; // calendar month (0 = Jan) of the recurrence layer
   let selAbs: number | null = null; // month shown on the map (absolute month number)
   let exportJob: AbortController | null = null;
   let areaMap: import('../lib/map').AreaMap | null = null;
@@ -1448,23 +1483,30 @@ import Base from '../layouts/Base.astro';
       const kind = hc.estimated[i] ? 'estimated from MODIS' : hc.preliminary[i] ? 'VIIRS, preliminary' : 'observed VIIRS';
       title = `${monthLabel(monthStr(selAbs))} · ${kind}`;
       label.textContent = monthLabel(monthStr(selAbs));
+    } else if (mapMode === 'recur') {
+      title = MONTHS_LONG[recMonth];
+      label.textContent = MONTHS_LONG[recMonth];
     } else {
       const span = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))}`;
       title = `${span} · ${toIdx - fromIdx + 1 >= 12 ? 'average per year' : 'total in the period'}`;
       label.textContent = 'Whole period';
     }
-    $('month-step').hidden = mapMode !== 'month';
+    $('month-step').hidden = mapMode === 'period';
     updateHotspots();
-    $<HTMLButtonElement>('map-prev').disabled = mapMode !== 'month' || i <= fromIdx;
-    $<HTMLButtonElement>('map-next').disabled = mapMode !== 'month' || i >= toIdx;
+    $<HTMLButtonElement>('map-prev').disabled = mapMode === 'period' || (mapMode === 'month' && i <= fromIdx);
+    $<HTMLButtonElement>('map-next').disabled = mapMode === 'period' || (mapMode === 'month' && i >= toIdx);
     markCalendar();
     if (!areaMap) return;
     // "All countries": each country's cells with its own shares, merged.
     const layerFor = (a: number, b: number) => current!.parts
       ? mergeLayers(current!.parts.map((p) => cellLayer(p.d.cells, p.hc, a, b)))
       : cellLayer(d.cells, hc, a, b);
+    if (mapMode !== 'recur') areaMap.setYearRound(null, '');
     if (mapMode === 'month') {
       areaMap.setCells(layerFor(i, i), title, MAP_SCALE.month);
+    } else if (mapMode === 'recur') {
+      showRecurrence();
+      return;
     } else {
       // Whole period: average per year, so the colour scale does not depend on the period length.
       // Periods under 12 months: total in the period on the month scale (scaling a few months up
@@ -1479,6 +1521,58 @@ import Base from '../layouts/Base.astro';
       layer.max *= perYear;
       layer.total *= perYear;
       areaMap.setCells(layer, title, MAP_SCALE.period);
+    }
+  }
+
+  // Recurrence layer: {CC}/recurrence/meta.json + mNN.json (0.01° grid, full S-NPP record),
+  // loaded on first use and cached.
+  const recCache = new Map<string, Promise<unknown>>();
+  let recToken = 0;
+
+  function loadRec<T>(path: string): Promise<T> {
+    let pr = recCache.get(path) as Promise<T> | undefined;
+    if (!pr) {
+      pr = fetchJson<T>(path);
+      pr.catch(() => recCache.delete(path));
+      recCache.set(path, pr);
+    }
+    return pr;
+  }
+
+  async function showRecurrence() {
+    if (!areaMap || !current) return;
+    const token = ++recToken;
+    const month = recMonth;
+    const name = MONTHS_LONG[month];
+    const scale0 = MAP_SCALE.recur(0, name);
+    const codes = current.parts ? current.parts.map((p) => p.d.code) : [current.country.code];
+    areaMap.setCells(null, `${name} · loading fire recurrence…`, scale0);
+    try {
+      const mm = String(month + 1).padStart(2, '0');
+      const loaded = await Promise.all(codes.map((c) => Promise.all([
+        loadRec<RecurrenceMeta>(`${c}/recurrence/meta.json`),
+        loadRec<RecurrenceMonth>(`${c}/recurrence/m${mm}.json`),
+      ])));
+      if (token !== recToken || mapMode !== 'recur' || !areaMap) return;
+      const parts = loaded.map(([meta, data]) => recurrenceLayer(meta, data, month));
+      const rings: YearRoundCell[] = loaded.flatMap(([meta]) => yearRoundCells(meta));
+      const r = parts[0];
+      const minYears = loaded[0][0].min_years;
+      areaMap.setYearRound(rings, rings.length
+        ? `Year-round fire, likely industrial (${rings.length.toLocaleString('en-US')}): click a ring`
+        : 'No year-round fire spots', loaded[0][0].cell_deg);
+      if (!r.years) {
+        areaMap.setCells(null, `${name} · no VIIRS ${name}s to count`, scale0);
+        return;
+      }
+      const layer = parts.length > 1 ? mergeLayers(parts) : r;
+      // A border cell can appear in two countries' files: cap at 100%.
+      for (let j = 0; j < layer.value.length; j++) layer.value[j] = Math.min(layer.value[j], 100);
+      const span = r.firstYear === r.lastYear ? `${r.firstYear}` : `${r.firstYear}–${r.lastYear}`;
+      areaMap.setCells(layer, `${name} · fire recurrence, ${r.years} years ${span}`, MAP_SCALE.recur(r.years, name, minYears));
+    } catch (err) {
+      console.error(err);
+      if (token === recToken && areaMap) areaMap.setCells(null, `${name} · recurrence data could not be loaded`, scale0);
     }
   }
 
@@ -1511,7 +1605,7 @@ import Base from '../layouts/Base.astro';
     const { country, d } = current;
     const on = $<HTMLInputElement>('show-hot').checked;
     if (!on || mapMode !== 'month') {
-      areaMap.setHotspots(null, on ? 'Hotspot points: choose "One month"' : '');
+      areaMap.setHotspots(null, on ? 'Hotspot points: choose "Month"' : '');
       return;
     }
     if (country.code === WORLD_CODE) {
@@ -1553,6 +1647,11 @@ import Base from '../layouts/Base.astro';
     if (!current) return;
     const first = monthAbs(current.h.firstMonth);
     selAbs = Math.min(Math.max(abs, first + current.fromIdx), first + current.toIdx);
+    if (mapMode === 'recur') { // stay in recurrence, follow the clicked calendar month
+      recMonth = ((abs % 12) + 12) % 12;
+      updateMapLayer();
+      return;
+    }
     mapMode = 'month';
     document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => (r.checked = r.value === 'month'));
     updateMapLayer();
@@ -1607,7 +1706,8 @@ import Base from '../layouts/Base.astro';
     // Browsers may restore radio states on reload; the map mode always starts at "One month".
     document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => (r.checked = r.value === mapMode));
     document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => r.addEventListener('change', () => {
-      mapMode = r.value as 'month' | 'period';
+      mapMode = r.value as MapMode;
+      if (mapMode === 'recur' && selAbs !== null) recMonth = selAbs % 12;
       updateMapLayer();
     }));
     $('show-hot').addEventListener('change', () => updateHotspots());
@@ -1624,8 +1724,14 @@ import Base from '../layouts/Base.astro';
         .forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.smooth === '1') === on)));
       areaMap?.setSmooth(on);
     }));
-    $('map-prev').addEventListener('click', () => selAbs !== null && selectMonth(selAbs - 1));
-    $('map-next').addEventListener('click', () => selAbs !== null && selectMonth(selAbs + 1));
+    const step = (dir: number) => {
+      if (mapMode === 'recur') {
+        recMonth = (recMonth + dir + 12) % 12;
+        updateMapLayer();
+      } else if (selAbs !== null) selectMonth(selAbs + dir);
+    };
+    $('map-prev').addEventListener('click', () => step(-1));
+    $('map-next').addEventListener('click', () => step(1));
     anomEl.addEventListener('click', (ev) => {
       const tr = (ev.target as HTMLElement).closest<HTMLElement>('tr[data-month]');
       if (tr) selectMonth(monthAbs(tr.dataset.month!));

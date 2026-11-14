@@ -26,7 +26,8 @@ from model import build_models
 from config import (
     CACHE_DIR, COUNTRIES, ENCODING, FILENAME_MAP, FIRST_MONTH, HIST_LAST_YEAR, HOTSPOT_COUNTRIES,
     INDUSTRIAL_MASK_MIN_SHARE, INDUSTRIAL_MASK_YEARS, LAST_COMPLETE_MONTH, OUT_DIR, RAW_DIR,
-    SATELLITE_NAMES, SATELLITE_SENSOR,
+    RECURRENCE_DEG, RECURRENCE_FIRST_MONTH, RECURRENCE_MIN_YEARS, SATELLITE_NAMES, SATELLITE_SENSOR,
+    SNPP_OUTAGE, YEAR_ROUND_MIN_CAL_MONTHS, YEAR_ROUND_MIN_SHARE,
 )
 
 WANTED_COLS = ["latitude", "longitude", "acq_date", "acq_time", "satellite", "frp", "type", "version"]
@@ -127,6 +128,7 @@ class FileResult:
     n_nrt: int = 0               # near real-time rows (after the cut)
     n_masked: int = 0            # of those, removed by the industrial mask
     mask_eval: dict = field(default_factory=dict)
+    fine: pd.DataFrame | None = None  # unique S-NPP type-0 (lat_f, lon_f, ym) on the 0.01° grid
 
 
 def assign_nrt_type(df: pd.DataFrame, mask: np.ndarray | None, path: Path) -> pd.DataFrame:
@@ -215,8 +217,15 @@ def process_file(path: Path, mask: np.ndarray | None = None, eval_masks: dict | 
             "lat": veg["latitude"].round(5).to_numpy(), "lon": veg["longitude"].round(5).to_numpy(),
             "sensor": veg["sat"].to_numpy(), "frp": veg["frp"].to_numpy(),
         })
+    snpp = veg[veg["sat"] == "SNPP"]
+    sdate = pd.to_datetime(snpp["acq_date"], format="%Y-%m-%d")
+    fine = pd.DataFrame({
+        "lat_f": np.floor(snpp["latitude"].to_numpy() / RECURRENCE_DEG + 1e-9).astype(np.int32),
+        "lon_f": np.floor(snpp["longitude"].to_numpy() / RECURRENCE_DEG + 1e-9).astype(np.int32),
+        "ym": (sdate.dt.year * 12 + sdate.dt.month - 1).to_numpy(np.int32),
+    }).drop_duplicates()
     return FileResult(cells, detections, stats, bbox, sat_dates, preliminary, industrial,
-                      hs, n_nrt, n_masked, mask_eval)
+                      hs, n_nrt, n_masked, mask_eval, fine)
 
 
 def check_date_ranges(results: list[tuple[Path, FileResult]]) -> None:
@@ -286,6 +295,7 @@ def build_country(code: str) -> dict:
     (CACHE_DIR / f"{code}_meta.json").write_text(json.dumps(meta, indent=1))
 
     write_cells_json(code, celldays, detections)
+    write_recurrence(code, pd.concat([r.fine for _, r in results], ignore_index=True))
     if want_hs:
         write_hotspots(code, [r.hotspots for _, r in results])
     else:
@@ -354,6 +364,60 @@ def write_cells_json(code: str, celldays: pd.DataFrame, detections: pd.DataFrame
     path.write_text(json.dumps(out, separators=(",", ":")))
     print(f"  {path.relative_to(OUT_DIR.parent.parent)}: {len(counts):,} rows, "
           f"{path.stat().st_size / 1e6:.2f} MB")
+
+
+def write_recurrence(code: str, fine: pd.DataFrame) -> None:
+    """{CC}/recurrence/: years with fire per 0.01° cell and calendar month (S-NPP, type 0).
+
+    meta.json: grid, counted months, `years[mo]` (years counted per calendar month, 0 = Jan),
+    `year_round` cells (likely industrial): lat, lon, share of all counted months, calendar months.
+    m01.json .. m12.json: lat, lon (0.01° grid indices, cell = [i * deg, (i + 1) * deg)),
+    n (years with >= 1 detection); only cells with n >= RECURRENCE_MIN_YEARS.
+    """
+    first = pd.Period(RECURRENCE_FIRST_MONTH, freq="M")
+    last = pd.Period(LAST_COMPLETE_MONTH, freq="M")
+    span = pd.period_range(first, last, freq="M")
+    bad = {pd.Period(m, freq="M") for m in SNPP_OUTAGE} & set(span)
+    used = [p for p in span if p not in bad]
+    used_ym = {p.year * 12 + p.month - 1 for p in used}
+    years = [sum(1 for p in used if p.month == mo + 1) for mo in range(12)]
+
+    f = fine.drop_duplicates()
+    f = f[f["ym"].isin(used_ym)]
+    rec = f.assign(mo=f["ym"] % 12).groupby(["lat_f", "lon_f", "mo"]).size().rename("n").reset_index()
+
+    # Year-round fire: share of all counted months with fire, and number of calendar months.
+    per_cell = rec.groupby(["lat_f", "lon_f"]).agg(months=("n", "sum"), cal=("mo", "size")).reset_index()
+    per_cell["share"] = per_cell["months"] / len(used)
+    yr = per_cell[(per_cell["share"] >= YEAR_ROUND_MIN_SHARE) & (per_cell["cal"] >= YEAR_ROUND_MIN_CAL_MONTHS)]
+    yr = yr.sort_values("share", ascending=False, ignore_index=True)
+
+    out_dir = OUT_DIR / code / "recurrence"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / code / "recurrence.json").unlink(missing_ok=True)  # older single-file layout
+    meta = {
+        "cell_deg": RECURRENCE_DEG, "first_month": str(first), "last_month": str(last),
+        "excluded": sorted(str(p) for p in bad), "months": len(used), "years": years,
+        "min_years": RECURRENCE_MIN_YEARS,
+        "year_round_rule": {"min_share": YEAR_ROUND_MIN_SHARE, "min_cal_months": YEAR_ROUND_MIN_CAL_MONTHS},
+        "year_round": {
+            "lat": yr["lat_f"].astype(int).tolist(), "lon": yr["lon_f"].astype(int).tolist(),
+            "share": yr["share"].round(3).tolist(), "cal": yr["cal"].astype(int).tolist(),
+        },
+    }
+    (out_dir / "meta.json").write_text(json.dumps(meta, separators=(",", ":")), encoding=ENCODING)
+    kept = rec[rec["n"] >= RECURRENCE_MIN_YEARS].sort_values(["mo", "lat_f", "lon_f"])
+    sizes = []
+    for mo in range(12):
+        g = kept[kept["mo"] == mo]
+        path = out_dir / f"m{mo + 1:02d}.json"
+        path.write_text(json.dumps({
+            "lat": g["lat_f"].astype(int).tolist(), "lon": g["lon_f"].astype(int).tolist(),
+            "n": g["n"].astype(int).tolist(),
+        }, separators=(",", ":")), encoding=ENCODING)
+        sizes.append(path.stat().st_size)
+    print(f"  {code}/recurrence: {len(kept):,} cell-months (n >= {RECURRENCE_MIN_YEARS}), "
+          f"{len(yr)} year-round cells, {sum(sizes) / 1e6:.2f} MB, largest month {max(sizes) / 1e6:.2f} MB")
 
 
 def write_hotspots(code: str, parts: list[pd.DataFrame | None]) -> None:
