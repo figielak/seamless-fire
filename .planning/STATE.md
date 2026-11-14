@@ -7,19 +7,23 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **5 done** (area validation, TS logic, area/presets/period, CSV export, anomalies with k ≥ 2, annual chart, Leaflet polygon drawing), next: **6**
-- Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
-  `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
-  and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
-- Pipeline: stages 1–2 done for 8 countries; model.json has full-precision params + `last_complete_month`
-- Tests: `python -m unittest discover -s pipeline/tests` (20), `npm run test:site` (36), `npm run check`
-- Mask check: `python pipeline/mask_check.py` (validation.md §2a). Model step refuses stale cache (`{CC}_meta.json`)
+- Stage: **6 done**, next: **7 (README)**
+- Main page `src/pages/index.astro` is map-first: full-screen Leaflet map, left control panel (country, area,
+  period, raw/harmonized toggle in "Values"), Now card, bottom dock (Calendar / Per year / Anomalies / About).
+  Map layer = per-cell share of the harmonized total (`src/lib/cellmap.ts`; preset cells sum to `harmonizeArea`).
+- Raw toggle: `rawSplice`/`rawRatio` in `src/lib/harmonize.ts`, link `v=raw`; changes calendar + per-year only.
+- Method page `src/pages/method.astro`: tables built from `public/data/{CC}/model.json` at build time,
+  before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.
+- Season profile and briefing **dropped** (user decision, time).
+- Logic: `src/lib/harmonize.ts`, `stats.ts`, `geo.ts`, `csv.ts`, `cellmap.ts`
+- Tests: `python -m unittest discover -s pipeline/tests` (20), `npm run test:site` (69), `npm run check` (0 errors)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`)
 
 ## Next step
 
-1. Stage 6: raw/harmonized toggle, season profile, briefing, Method page (use `model.area` + validation.md §9b).
+1. Stage 7: README (English): what it does, method summary, data sources (NASA FIRMS, EFFIS for the check,
+   EOX Sentinel-2 cloudless base map attribution), Apache 2.0, LLM-tools disclosure, how to rebuild.
 
 ## Blockers / open questions
 
