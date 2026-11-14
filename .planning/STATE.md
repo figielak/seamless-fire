@@ -13,6 +13,8 @@ Updated: 2026-11-14
   Map layer = per-cell share of the harmonized total (`src/lib/cellmap.ts`; preset cells sum to `harmonizeArea`).
 - "All countries (8)" view: `WORLD_CODE = 'ALL'` (`src/lib/world.ts`): each country harmonized with its own model,
   then summed; hotspot export stays per country; live cold first load ~7 s. Map colours: one fixed scale for all countries.
+- Map rendering (`src/lib/map.ts`): default "Smooth" (bilinear between cell centres, ~20 ms/redraw), legend toggle
+  "Smooth / Cells"; falls back to squares when a cell is < 3 px on screen. Live (95eddff).
 - Raw toggle: `rawSplice`/`rawRatio` in `src/lib/harmonize.ts`, link `v=raw`; changes calendar + per-year only.
 - Method page `src/pages/method.astro`: tables built from `public/data/{CC}/model.json` at build time,
   before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.
