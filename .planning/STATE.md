@@ -11,7 +11,7 @@ Updated: 2026-11-14
 - Scaffold exists: Astro (`src/pages/index.astro`, `method.astro`, `lib/data.ts`), `pipeline/build_data.py` (only lists files), `config.py`, deploy workflow
 - `public/data/` is empty
 - Git: scaffold + `.planning` pushed to `origin/main`; deploy run / live site not verified yet
-- Raw data present for PL, PT, ES, GR, UA (52 CSV each)
+- Raw data present for PL, PT, ES, GR, UA, AU (52 CSV each); `data/` tidied (empty `firms_*` removed, single `AttributesReadme.txt`)
 
 ## Next step
 

@@ -92,21 +92,23 @@ Detect the sensor from the `satellite` column, fall back to the file name.
 - Folder layout (`data/{Country}/`, Country = full name, e.g. `Poland`; code→name map in `pipeline/config.py`):
   ```
   MODIS/modis_{YYYY}_{Country}.csv              2000–2025
-  VIIRS-SNPP/viirs-snpp_{YYYY}_{Country}.csv    2012–2025
-  VIIRS-JPSS1/viirs-jpss1_{YYYY}_{Country}.csv  2018–2025 (NOAA-20)
-  FIRMS_2026/DL_FIRE_SV-C2_{id}/fire_{archive,nrt}_SV-C2_{id}.csv    S-NPP 2026
-  FIRMS_2026/DL_FIRE_J1V-C2_{id}/fire_{archive,nrt}_J1V-C2_{id}.csv  NOAA-20 2026
+  VIIRS-SNPP/viirs-snpp_{YYYY}_{Country}.csv    2012–2026
+  VIIRS-JPSS1/viirs-jpss1_{YYYY}_{Country}.csv  2018–2026 (NOAA-20)
   ```
-  `data/Canada` exists but is not used.
+  The 2026 files are merged from FIRMS Archive Download (`fire_archive_*` + `fire_nrt_*`,
+  columns renamed to `bright_ti4`/`bright_ti5`). Originals: `data/_downloads_2026/{Country}/` (not read by the pipeline).
+  `data/Canada` exists but is not used (VIIRS S-NPP only 2012–2017).
+  `data/AttributesReadme.txt`: FIRMS column descriptions (one copy for all countries).
 - Columns: MODIS `latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_t31,frp,daynight,type`;
-  VIIRS yearly: same but `bright_ti4`/`bright_ti5`; 2026 files use `brightness`/`bright_t31` for VIIRS too.
+  VIIRS: same but `bright_ti4`/`bright_ti5`.
   `acq_time` is HHMM as string (e.g. `0039`), keep leading zeros. Encoding: ASCII/UTF-8.
 - `satellite` values: MODIS `Terra`/`Aqua`; S-NPP `N` (yearly), `SNPP` (2026); NOAA-20 `N20`
-- 2026: `fire_archive_*` (2026-01-03 → 2026-07-31) **has** `type`; `fire_nrt_*` (2026-08-01 →) has **no**
-  `type` → industrial mask needed only for NRT. Last dates: S-NPP NRT 2026-11-02 (PL: 2026-10-31), NOAA-20 NRT 2026-11-12.
-- Largest used file: ~13 MB (UA VIIRS S-NPP 2015). All 5 countries ~290 MB.
+- 2026 files: rows 2026-01-03 → 2026-07-31 (archive) have `type`; rows from 2026-08-01 (NRT,
+  `version` = `2.0NRT`) have **empty** `type` → industrial mask for those rows only. NRT rows = preliminary. Last dates: S-NPP NRT 2026-11-02 (PL: 2026-10-31), NOAA-20 NRT 2026-11-12.
+- Largest used file: ~164 MB (AU VIIRS S-NPP 2012); AU total ~2.7 GB, other countries ~290 MB together.
+  Read with `usecols` and aggregate per file; never concat all raw AU rows in memory.
 
-Countries: PL, PT, ES (required), GR, UA (if downloaded). Country list is one variable.
+Countries: PL, PT, ES (required), GR, UA, AU (all downloaded). Country list is one variable.
 
 ## Sanity checks (results of earlier exploration, PL and PT, 2012–2025)
 
