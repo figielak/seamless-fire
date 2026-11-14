@@ -95,6 +95,7 @@ export interface ViewState {
   area: AreaSpec;
   from?: string;
   to?: string;
+  view?: 'raw'; // raw/harmonized toggle; harmonized = default (not in the link)
 }
 
 export interface ParsedHash extends ViewState {
@@ -131,6 +132,9 @@ export function parseHash(hash: string): ParsedHash {
       else if (key === 'from' || key === 'to') {
         if (!MONTH_RE.test(val)) throw new AreaError(`Invalid month "${val}".`);
         out[key] = val;
+      } else if (key === 'v') {
+        if (val !== 'raw') throw new AreaError(`Unknown view "${val}".`);
+        out.view = 'raw';
       }
     } catch (e) {
       errors.push(e instanceof Error ? e.message : String(e));
@@ -156,6 +160,7 @@ export function serializeHash(v: ViewState): string {
   if (a) parts.push(`area=${a}`);
   if (v.from) parts.push(`from=${v.from}`);
   if (v.to) parts.push(`to=${v.to}`);
+  if (v.view === 'raw') parts.push('v=raw');
   return `#${parts.join('&')}`;
 }
 

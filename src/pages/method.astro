@@ -1,8 +1,430 @@
 ---
+// Method page: evidence read from public/data/{CC}/model.json at build time (no client fetch for
+// the tables). Only the before/after chart runs in the browser (Plotly).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
+
+interface MethodScore {
+  loyo_annual: number;
+  loyo_logrmse: number;
+  backtest_annual: number;
+  backtest_bias: number;
+}
+interface ModelJson {
+  model: string;
+  b: number;
+  sigma: number;
+  sigma_annual: number;
+  methods: Record<string, MethodScore>;
+  agreement: Record<'exact' | 'neighbor', { modis_in_viirs: number; viirs_in_modis: number }>;
+  industrial_share: Record<string, number>;
+  industrial_mask: { nrt_rows: number; nrt_masked: number };
+  area: {
+    methods: Record<'direct' | 'share', { logrmse_median: number; bias: number }>;
+    n_blocks: number;
+    h_month: number;
+    coverage_holdout: { month: number; annual: number };
+  };
+  annual: {
+    years: number[];
+    modis: number[];
+    viirs: number[];
+    harmonized: number[];
+    lo: number[];
+    hi: number[];
+    partial_year: boolean[];
+  };
+  viirs_first_month: string;
+}
+
+const dataDir = join(process.cwd(), 'public', 'data');
+const readJson = <T,>(p: string): T => JSON.parse(readFileSync(join(dataDir, p), 'utf-8'));
+const countries = readJson<{ code: string; name: string }[]>('countries.json');
+const rows = countries.map((c) => ({ ...c, m: readJson<ModelJson>(`${c.code}/model.json`) }));
+
+const METHODS = ['A', 'B', 'C', 'D', 'E'] as const;
+const pct = (x: number, d = 0) => `${(x * 100).toFixed(d)}%`;
+const signed = (x: number) => {
+  const r = Math.round(x * 100);
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r)}%`;
+};
+const f2 = (x: number) => x.toFixed(2);
+
+// Continuity at the switch: naive splice (VIIRS 2012 / MODIS 2011) vs harmonized 2012 / 2011.
+const vfYear = Number(rows[0].m.viirs_first_month.slice(0, 4));
+const continuity = rows.map(({ code, m }) => {
+  const a = m.annual;
+  const i = a.years.indexOf(vfYear);
+  return {
+    code,
+    naive: a.modis[i - 1] > 0 ? a.viirs[i] / a.modis[i - 1] : null,
+    harmonized: a.harmonized[i - 1] > 0 ? a.harmonized[i] / a.harmonized[i - 1] : null,
+  };
+});
+
+// Chart data: complete years only (2000 has MODIS from November, the last year is partial).
+const chart = Object.fromEntries(
+  rows.map(({ code, name, m }) => {
+    const a = m.annual;
+    const keep = a.years.map((y, i) => y > a.years[0] && !a.partial_year[i]);
+    const pick = (arr: number[]) => arr.filter((_, i) => keep[i]);
+    return [code, {
+      name,
+      years: pick(a.years),
+      modis: pick(a.modis),
+      viirs: pick(a.viirs),
+      harmonized: pick(a.harmonized),
+      lo: pick(a.lo),
+      hi: pick(a.hi),
+      vfYear,
+    }];
+  }),
+);
+const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validation.md';
 ---
 
 <Base title="Method · Seamless Fire">
   <h1>Method</h1>
-  <p>Coming soon.</p>
+  <p class="lead">
+    How MODIS (2000–) and VIIRS (2012–) hotspots are put on one scale, and how well it works.
+    All numbers below are read from the data files the site uses. Full details:{' '}
+    <a href={repo}>validation report</a>.
+  </p>
+
+  <section class="card">
+    <h2>In five steps</h2>
+    <ol class="steps">
+      <li>
+        <b>Vegetation fires only.</b> FIRMS hotspots with <code>type</code> 0 are kept; industrial heat
+        sources (<code>type</code> 2: steel works, gas flares) are removed. Near real-time 2026 rows have no <code>type</code>, so they are removed when their 0.01° cell was mostly industrial in 2012–2025.
+      </li>
+      <li>
+        <b>Cell-days.</b> A 0.1° grid cell (about 11 km) with at least one detection on a day counts once,
+        per sensor. This makes the two sensors comparable: VIIRS (375 m pixels) puts many detections on one
+        fire, MODIS (1 km) only a few. MODIS = Terra + Aqua.
+      </li>
+      <li>
+        <b>Model per country</b>, calibrated on monthly country totals 2012–2025:{' '}
+        <code>log(1 + VIIRS) = a[season] + b · log(1 + MODIS)</code>. Variant D has one <code>a</code>,
+        variant E one per season; E is used only when it is clearly better.
+      </li>
+      <li>
+        <b>2000–2011 estimated</b> from MODIS with the model, with a ~80% interval from the validation errors.
+        Before Aqua (until mid-2002) Terra counts are scaled up first, with a wider interval.
+        From February 2012 the series is observed VIIRS S-NPP.
+      </li>
+      <li>
+        <b>Custom areas</b>: raw cell-days are summed inside the area first. Before 2012 the area gets its
+        share of the country estimate (area MODIS / country MODIS), with a wider interval.
+      </li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Before and after 2012 <span class="unit">annual cell-days</span></h2>
+    <div class="row">
+      <label for="m-country">Country</label>
+      <select id="m-country">
+        {rows.map((r) => <option value={r.code}>{r.name}</option>)}
+      </select>
+    </div>
+    <div id="splice" class="chart" aria-label="Annual raw MODIS, raw VIIRS and harmonized series"></div>
+    <p class="note">
+      Raw MODIS and raw VIIRS count very different numbers, so joining them naively makes a false jump in 2012.
+      The harmonized series (red) continues smoothly; the band is the ~80% interval for estimated years.
+      2000 (MODIS from November) and the current partial year are left out.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>2012 / 2011</th>{continuity.map((c) => <th>{c.code}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><td>Naive splice (VIIRS / MODIS)</td>{continuity.map((c) => <td>{c.naive ? `×${c.naive.toFixed(1)}` : '–'}</td>)}</tr>
+          <tr><td>Harmonized</td>{continuity.map((c) => <td>{c.harmonized ? `×${c.harmonized.toFixed(2)}` : '–'}</td>)}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      The Ukrainian drop is real: raw MODIS itself fell by about a third from 2011 to 2012.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Method comparison <span class="unit">leave-one-year-out, 2012–2025</span></h2>
+    <p>
+      Each year 2012–2025 is hidden in turn, the method is fitted on the other years, and the hidden
+      year's VIIRS is predicted from MODIS alone: the same task as reconstructing 2000–2011.
+    </p>
+    <ul class="compact">
+      <li><b>A</b>: one VIIRS/MODIS ratio for all countries; <b>B</b>: one ratio per country;{' '}
+        <b>C</b>: ratio per country and calendar month</li>
+      <li><b>D</b>: log-log model per country; <b>E</b>: as D with a seasonal intercept</li>
+    </ul>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Country</th>
+            {METHODS.map((k) => <th>{k}</th>)}
+            <th>Chosen</th>
+            <th>b</th>
+            <th>Backtest</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ code, m }) => (
+            <tr>
+              <td>{code}</td>
+              {METHODS.map((k) => (
+                <td class={k === m.model ? 'chosen' : ''}>
+                  {pct(m.methods[k].loyo_annual)} · {f2(m.methods[k].loyo_logrmse)}
+                </td>
+              ))}
+              <td><b>{m.model}</b></td>
+              <td>{f2(m.b)}</td>
+              <td>{signed(m.methods[m.model].backtest_bias)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      Cells: annual error · monthly log-RMSE (0.10 ≈ ±10%, 0.43 ≈ a factor of 1.5, 1.1 ≈ a factor of 3).
+      The log-log model wins everywhere, often by a factor of 2 in monthly error: the relation is not
+      proportional (<i>b</i> &lt; 1), VIIRS gains relatively more in quiet months with small fires.
+      E is chosen only when it beats D by more than 0.01 log-RMSE (rule fixed before the results).
+      Backtest: fitted on 2019–2025, signed annual error on 2012–2018.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Do the sensors see the same fires? <span class="unit">2012–2025, same cell and day</span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th>{rows.map((r) => <th>{r.code}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><td>MODIS cell-days also seen by VIIRS</td>{rows.map(({ m }) => <td>{pct(m.agreement.exact.modis_in_viirs)}</td>)}</tr>
+          <tr><td>… with neighbour cells allowed</td>{rows.map(({ m }) => <td>{pct(m.agreement.neighbor.modis_in_viirs)}</td>)}</tr>
+          <tr><td>VIIRS cell-days also seen by MODIS</td>{rows.map(({ m }) => <td>{pct(m.agreement.exact.viirs_in_modis)}</td>)}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      Monthly totals move together (correlation 0.91–0.99), but single events often differ: in Poland most
+      fires are short agricultural burns, and the satellites pass at different times of day. So the method is
+      valid for <b>totals</b> (an area and a month), not for single fires. That is why the site sums first and
+      harmonizes after.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Industrial filter <span class="unit">share of detections removed, 2000–2025</span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th>{rows.map((r) => <th>{r.code}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><td>MODIS, <code>type</code> 2</td>{rows.map(({ m }) => <td>{pct(m.industrial_share.MODIS, 1)}</td>)}</tr>
+          <tr><td>VIIRS, <code>type</code> 2</td>{rows.map(({ m }) => <td>{pct(m.industrial_share.VIIRS, 1)}</td>)}</tr>
+          <tr>
+            <td>2026 near real-time rows masked</td>
+            {rows.map(({ m }) => <td>{pct(m.industrial_mask.nrt_masked / m.industrial_mask.nrt_rows, 0)}</td>)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      In Poland about 72% of VIIRS detections are industrial (steel, coke and power plants). Without the
+      filter they would dominate the Polish calendar. The near real-time mask was checked on January–July
+      2026 archive data with the type hidden: Polish monthly error fell from −26% (any industrial history)
+      to −2.5% (majority rule).
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Custom areas <span class="unit">2° test blocks, same validation</span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th>{rows.map((r) => <th>{r.code}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><td>Test blocks</td>{rows.map(({ m }) => <td>{m.area.n_blocks}</td>)}</tr>
+          <tr><td>Monthly log-RMSE, model on the area</td>{rows.map(({ m }) => <td>{f2(m.area.methods.direct.logrmse_median)}</td>)}</tr>
+          <tr><td>Monthly log-RMSE, country share (used)</td>{rows.map(({ m }) => <td class="chosen">{f2(m.area.methods.share.logrmse_median)}</td>)}</tr>
+          <tr><td>Months inside the ~80% interval</td>{rows.map(({ m }) => <td>{pct(m.area.coverage_holdout.month)}</td>)}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      Applying the country model directly to a small area gives a false floor of several cell-days per month
+      even where nothing burns. The country share avoids it and lowers the error in every country (PL 1.90 → 0.93, CA 2.44 → 0.41). Areas are still much less
+      certain than countries, and the site says so.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>How far to trust 2000–2011</h2>
+    <div class="table-wrap">
+      <table class="left">
+        <thead><tr><th>Confidence</th><th>Countries</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>High</td><td>AU, CA, ES</td><td>high correlation, monthly error 10–22%, stable backtest</td></tr>
+          <tr><td>Good, older years may be biased</td><td>PT, GR, UA, CL</td><td>good validation, but a model fitted on recent years drifts on 2012–2018 (PT, GR, UA low by 9–27%; CL high by 17%)</td></tr>
+          <tr><td>Lower</td><td>PL</td><td>small, short agricultural fires; sensors see different events; monthly error ~×1.5</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Limitations</h2>
+    <ul>
+      <li><b>Not burned area.</b> Cell-days measure how widespread fire activity was, not hectares or damage.
+        A compact deadly fire (Valparaíso, February 2024) barely shows.</li>
+      <li><b>Megafires saturate.</b> One cell counts once per day however many detections it has: Portugal
+        September 2024 had 10,450 VIIRS detections but 358 cell-days.</li>
+      <li><b>Drift over time.</b> In Portugal the backtest underestimates every year by 21–33%, so 2000–2011
+        may be too low there. Comparison with EFFIS national statistics supports the shape of the series
+        but cannot check its absolute level (EFFIS counts forest fires, not all vegetation fires).</li>
+      <li><b>Sensor gaps.</b> Terra only in 2000 (from November) and until mid-2002; Aqua failure Aug–Sep 2020;
+        S-NPP outage Jul–Aug 2022. These months are marked and left out of calibration and statistics.</li>
+      <li><b>Preliminary months.</b> August–October 2026 use near real-time data without the FIRMS type
+        field; they are marked and may change.</li>
+      <li><b>After S-NPP.</b> S-NPP data end on 2 November 2026; NOAA-20 will continue the series with a
+        factor of 0.92–0.98 (stored, not yet needed).</li>
+      <li><b>Custom areas</b> carry much wider intervals than countries, especially before 2012.</li>
+    </ul>
+  </section>
+
+  <script type="application/json" id="splice-data" set:html={JSON.stringify(chart)} />
 </Base>
+
+<style>
+  .row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .row label {
+    font-weight: 600;
+  }
+  .chart {
+    width: 100%;
+    min-height: 340px;
+  }
+  .steps li,
+  ul li {
+    margin-bottom: 0.4rem;
+  }
+  .compact {
+    font-size: 0.92rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 0.6rem;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+    white-space: nowrap;
+  }
+  th:first-child,
+  td:first-child,
+  table.left th,
+  table.left td {
+    text-align: left;
+  }
+  table.left td {
+    white-space: normal;
+  }
+  td.chosen {
+    font-weight: 700;
+    background: #eef3fb;
+  }
+</style>
+
+<script>
+  interface Series {
+    name: string;
+    years: number[];
+    modis: number[];
+    viirs: number[];
+    harmonized: number[];
+    lo: number[];
+    hi: number[];
+    vfYear: number;
+  }
+  const data: Record<string, Series> = JSON.parse(document.getElementById('splice-data')!.textContent!);
+  const sel = document.getElementById('m-country') as HTMLSelectElement;
+  const el = document.getElementById('splice')!;
+
+  async function draw() {
+    const Plotly = (await import('plotly.js-dist-min')).default;
+    const s = data[sel.value];
+    const est = s.years.map((y) => y < s.vfYear);
+    const bandX = s.years.filter((_, i) => est[i]);
+    const bandLo = s.lo.filter((_, i) => est[i]);
+    const bandHi = s.hi.filter((_, i) => est[i]);
+    const traces: Partial<Plotly.Data>[] = [
+      { x: bandX, y: bandLo, type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+      {
+        x: bandX, y: bandHi, type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty',
+        fillcolor: 'rgba(232,67,46,0.15)', name: '~80% interval', hoverinfo: 'skip',
+      },
+      {
+        x: s.years, y: s.modis.map((v) => (v > 0 ? v : null)), type: 'scatter', mode: 'lines+markers',
+        name: 'Raw MODIS', line: { color: '#7f8fa6' }, marker: { size: 5 },
+      },
+      {
+        x: s.years, y: s.viirs.map((v, i) => (s.years[i] >= s.vfYear ? v : null)), type: 'scatter',
+        mode: 'lines+markers', name: 'Raw VIIRS S-NPP', line: { color: '#00224e' }, marker: { size: 5 },
+      },
+      {
+        x: s.years, y: s.harmonized, type: 'scatter', mode: 'lines', name: 'Harmonized',
+        line: { color: '#e8432e', width: 3 },
+      },
+    ];
+    const layout: Partial<Plotly.Layout> = {
+      height: 340,
+      margin: { l: 60, r: 10, t: 10, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
+      hovermode: 'x unified',
+      xaxis: { fixedrange: true, dtick: 2 },
+      yaxis: { fixedrange: true, title: { text: 'cell-days' }, rangemode: 'tozero', gridcolor: '#e5e8ec', hoverformat: ',.0f' },
+      legend: { orientation: 'h', x: 0, y: 1.08 },
+      shapes: [{
+        type: 'line', x0: s.vfYear - 0.5, x1: s.vfYear - 0.5, yref: 'paper', y0: 0, y1: 1,
+        line: { color: '#57606a', dash: 'dot', width: 1.5 },
+      }],
+    };
+    await Plotly.react(el, traces as Plotly.Data[], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+      toImageButtonOptions: { filename: `seamless-fire-${sel.value}-before-after-2012` },
+    });
+  }
+
+  const fromHash = location.hash.slice(1).toUpperCase();
+  if (data[fromHash]) sel.value = fromHash;
+  sel.addEventListener('change', () => {
+    history.replaceState(null, '', `#${sel.value}`);
+    draw();
+  });
+  draw();
+</script>

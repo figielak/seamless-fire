@@ -72,6 +72,7 @@ export interface Harmonized {
   lowQuality: boolean[];
   preliminary: boolean[];
   area: boolean; // custom area (country share before VIIRS), not the whole country
+  raw?: boolean; // naive splice (raw MODIS, then raw VIIRS), for display only
 }
 
 // Calendar month (1..12) -> season index: DJF=0, MAM=1, JJA=2, SON=3
@@ -208,6 +209,34 @@ export function harmonizeArea(area: Series, country: Harmonized, model: Model): 
     }
   }
   return out;
+}
+
+/**
+ * Naive splice for the raw/harmonized toggle: raw MODIS cell-days before the first VIIRS month,
+ * raw VIIRS after. No model and no interval, so the 2012 sensor jump stays visible.
+ */
+export function rawSplice(h: Harmonized, model: Model): Harmonized {
+  const n = h.value.length;
+  const first = monthAbs(h.firstMonth);
+  const viirsFirst = monthAbs(model.viirs_first_month);
+  const value = new Float64Array(n);
+  for (let i = 0; i < n; i++) value[i] = first + i < viirsFirst ? h.modis[i] : h.viirs[i];
+  return { ...h, value, lo: value, hi: value, estimated: new Array(n).fill(false), raw: true };
+}
+
+/** VIIRS / MODIS raw cell-day ratio over months where both sensors have data (null = no MODIS). */
+export function rawRatio(h: Harmonized, model: Model): number | null {
+  const first = monthAbs(h.firstMonth);
+  const viirsFirst = monthAbs(model.viirs_first_month);
+  const modisLast = coverageSpan(model, ['Terra', 'Aqua'])?.[1] ?? Infinity;
+  let m = 0, v = 0;
+  for (let i = 0; i < h.value.length; i++) {
+    const a = first + i;
+    if (a < viirsFirst || a > modisLast || h.lowQuality[i] || h.preliminary[i]) continue;
+    m += h.modis[i];
+    v += h.viirs[i];
+  }
+  return m > 0 ? v / m : null;
 }
 
 export interface YearTotal {

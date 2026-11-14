@@ -10,6 +10,8 @@ import {
   monthAbs,
   monthCount,
   monthlyTotals,
+  rawRatio,
+  rawSplice,
   type Cells,
   type Model,
 } from './harmonize.ts';
@@ -64,6 +66,7 @@ test('hash round trip and bad hashes', () => {
     { code: 'PL', area: { kind: 'preset' as const, id: 'biebrza' }, from: '2019-01', to: '2020-12' },
     { code: 'PT', area: { kind: 'shape' as const, shape: { kind: 'rect' as const, bbox: [-9, 37, -8, 38] as [number, number, number, number] } } },
     { code: 'ES', area: { kind: 'shape' as const, shape: { kind: 'polygon' as const, ring: [[-3, 40], [-2, 40], [-2.5, 41]] as [number, number][] } } },
+    { code: 'PT', area: { kind: 'country' as const }, view: 'raw' as const },
   ];
   for (const s of states) assert.deepEqual(parseHash(serializeHash(s)), s);
   const bad = parseHash('#pl&area=p:1,2;3,4&from=2020-13');
@@ -73,6 +76,7 @@ test('hash round trip and bad hashes', () => {
   assert.match(bad.error!, /at least 3/);
   assert.match(parseHash('#PL&area=preset:nope').error!, /Unknown preset/);
   assert.match(parseHash('#PL&area=x:1').error!, /Unknown area/);
+  assert.match(parseHash('#PL&v=odd').error!, /Unknown view/);
   const swapped = parseHash('#PL&from=2021-05&to=2020-01');
   assert.deepEqual([swapped.from, swapped.to], ['2020-01', '2021-05']);
 });
@@ -153,6 +157,19 @@ test('annual totals: range cut marks partial years; area interval for an empty a
   assert.equal(y2005.value, 0);
   assert.equal(y2005.lo, 0);
   assert.ok(close(y2005.hi, Math.expm1(model.area.h_annual)));
+});
+
+test('raw splice: MODIS before VIIRS, VIIRS after, no intervals; ratio > 1', () => {
+  const { model, h } = load('PL');
+  const r = rawSplice(h, model);
+  const sw = monthAbs(model.viirs_first_month) - monthAbs(h.firstMonth);
+  assert.equal(r.value[sw - 1], h.modis[sw - 1]);
+  assert.equal(r.value[sw], h.viirs[sw]);
+  assert.ok(r.raw && r.estimated.every((e) => !e));
+  assert.ok(annualTotals(r, model).every((x) => x.lo === x.value && x.hi === x.value));
+  assert.ok(h.estimated[0] && !h.raw); // input untouched
+  const ratio = rawRatio(h, model)!;
+  assert.ok(ratio > 2 && ratio < 6, `PL VIIRS/MODIS ${ratio}`);
 });
 
 // ------------------------------------------------------------------ anomalies
