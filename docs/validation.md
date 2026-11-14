@@ -25,6 +25,41 @@ of the different pixel sizes (MODIS ~1 km, VIIRS 375 m): one large fire produces
 VIIRS points but only a few hundred cell-days (Portugal, September 2024: 10,450 S-NPP detections,
 358 cell-days).
 
+### 1a. Sensitivity to the unit (`pipeline/sensitivity.py`)
+
+The same calibration months and the same validation (LOYO, backtest 2019–2025 → 2012–2018) were
+run on five units: cell-days on 0.05°, 0.1° (used) and 0.25° grids, raw detection counts, and
+the FRP sum. AU was not run (2.7 GB of raw rows). The 0.1° column reproduces the stage 2 numbers,
+which checks the script.
+
+Cells: LOYO annual error / backtest bias / rank of the month with the most S-NPP detections
+(2012–2025) within the unit's own ranking. Model variant as chosen for the country.
+
+| Country (model) | cell 0.05° | **cell 0.1°** | cell 0.25° | detections | FRP sum |
+|---|---|---|---|---|---|
+| PL (E) | 15% / +5% / #1 | **15% / +6% / #1** | 15% / +6% / #1 | 17% / +8% / #1 | 25% / −19% / #2 |
+| PT (D) | 10% / −26% / #8 | **10% / −27% / #12** | 10% / −24% / #24 | 10% / −18% / #1 | 16% / −31% / #3 |
+| ES (D) | 6% / −4% / #1 | **6% / −4% / #2** | 5% / −3% / #3 | 11% / +11% / #1 | 13% / −11% / #1 |
+| GR (E) | 11% / −14% / #23 | **9% / −11% / #38** | 7% / −7% / #49 | 8% / −3% / #1 | 21% / −4% / #1 |
+| UA (E) | 7% / −9% / #3 | **7% / −9% / #3** | 6% / −8% / #1 | 8% / −3% / #1 | 14% / −17% / #3 |
+| CL (D) | 9% / +14% / #3 | **10% / +17% / #8** | 10% / +19% / #10 | 13% / +20% / #1 | 7% / −3% / #1 |
+| CA (D) | 10% / −3% / #1 | **8% / −3% / #1** | 6% / −3% / #1 | 19% / −8% / #1 | 14% / −6% / #3 |
+
+Findings:
+
+- **Grid size hardly changes the harmonization error.** Between 0.05° and 0.25° the LOYO annual
+  error moves by 0–4 points. Coarser grids are slightly better on totals (smoothing).
+- **But coarser grids saturate more.** The month with the most detections drops in the cell-day
+  ranking: Greece, August 2021 (Evia and Attica fires) is #38 at 0.1° and #49 at 0.25°;
+  Portugal, September 2024 is #12 and #24. Cell-days measure how widespread fire activity is
+  (space × time), not how large or intense single fires are.
+- **Detections are not better overall.** They avoid saturation and reduce the backtest drift in
+  PT and GR, but are worse in ES, CA and CL (LOYO 11–19%), because the VIIRS/MODIS detection ratio
+  depends on fire size.
+- **FRP sum is the least stable** in most countries (LOYO 13–25%), except CL.
+- No unit wins everywhere. 0.1° cell-days stay a good compromise for harmonization; saturation of
+  megafire months is a stated limitation of the index.
+
 ## 2. Industrial filter
 
 Only `type == 0` (presumed vegetation fire) is kept. Share of `type == 2` (static land source,
