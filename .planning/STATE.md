@@ -35,8 +35,8 @@ Updated: 2026-11-14
 Daily NRT updates ("present" = today), stages A–D agreed with the user 2026-11-14 (deadline not binding):
 - A done (uncommitted): `pipeline/borders.py` → `live/borders.json`, masks → `live/masks/`, `pipeline/live_base.py`
   → `public/data/{CC}/daily/` + `live/nrt/`, `live/coverage.json` (seed NOAA-20 1–12 Nov 2026).
-- B next: `pipeline/live_update.py` (global NOAA-20 7d file → borders, mask, dedupe → live/nrt, `{CC}/live.json`).
-- C: site (month to date, "Now" vs same days 2012–2025, "This season" tab). D: GitHub Actions daily cron.
+- B done (uncommitted): `pipeline/live_update.py`, idempotent, real download ~1.5 min, tests in `pipeline/tests/test_live.py`.
+- C next: site (month to date, "Now" vs same days 2012–2025, "This season" tab). D: GitHub Actions daily cron.
 
 ## Blockers / open questions
 
