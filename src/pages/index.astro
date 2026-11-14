@@ -357,7 +357,7 @@ import Base from '../layouts/Base.astro';
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem 2rem;
+    gap: 0.5rem 1.4rem;
     padding: 0.6rem 1rem;
     border-left: 4px solid var(--head);
   }
@@ -430,7 +430,7 @@ import Base from '../layouts/Base.astro';
   }
   .annual {
     width: 100%;
-    min-height: 300px;
+    height: 320px;
   }
   .about ul {
     margin: 0.4rem 0;
@@ -568,10 +568,10 @@ import Base from '../layouts/Base.astro';
   }
   section.now dl {
     display: flex;
-    gap: 0.3rem 1.6rem;
+    gap: 0.3rem 1.2rem;
     flex-wrap: wrap;
     margin: 0;
-    padding-left: 1.6rem;
+    padding-left: 1.4rem;
     border-left: 1px solid var(--line);
     font-size: 0.82rem;
   }
@@ -817,9 +817,9 @@ import Base from '../layouts/Base.astro';
         <div class="now-fig ${cls}"><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b>
           <span>typical, ${word} the usual ${calName}</span></div>
         <dl>
-          <div><dt>Typical ${calName} (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
+          <div><dt>Typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
           <div><dt>Usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
-          <div><dt>Rank among ${s.nAll} ${calName}s since 2000</dt>
+          <div><dt>Rank among ${s.nAll} ${calName}s</dt>
           <dd>higher than ${Math.round(s.percentile)}%</dd></div>
         </dl>`;
     }
@@ -947,13 +947,16 @@ import Base from '../layouts/Base.astro';
     const lastEst = vf - 1;
     const estLabel = `${MONTHS[first % 12]} ${Math.floor(first / 12)} – ${MONTHS[lastEst % 12]} ${Math.floor(lastEst / 12)}`;
 
-    const narrow = calEl.clientWidth < 560;
+    // width 0 = calendar tab hidden while rendering; it is re-rendered when the tab is shown
+    const narrow = calEl.clientWidth > 0 && calEl.clientWidth < 560;
     // Fit all years into the chart panel when it has room (rows 16–30 px), else let it scroll.
     const body = calEl.closest<HTMLElement>('.dock-body');
     const avail = body && body.clientHeight > 300 ? body.clientHeight - 80 : 0;
     const rowH = avail ? Math.min(30, Math.max(16, Math.floor((avail - 100) / years.length))) : 20;
+    const calH = Math.max(260, years.length * rowH + 100);
+    calEl.style.height = `${calH}px`; // Plots.resize autosizes to the container
     const layout: Partial<Plotly.Layout> = {
-      height: Math.max(260, years.length * rowH + 100),
+      height: calH,
       margin: { l: 44, r: 10, t: 28, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -1045,7 +1048,7 @@ import Base from '../layouts/Base.astro';
       } as Partial<Plotly.Data>,
     ];
     const layout: Partial<Plotly.Layout> = {
-      height: 320,
+      height: 320, // container height set in CSS: Plots.resize autosizes to it
       margin: { l: 60, r: 10, t: 10, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -1257,6 +1260,7 @@ import Base from '../layouts/Base.astro';
     tabs.forEach((t) => t.addEventListener('click', () => {
       tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
       bodies.forEach((b) => (b.hidden = b.dataset.tab !== t.dataset.tab));
+      if (t.dataset.tab === 'calendar') rerenderCalendar();
       resizeCharts();
     }));
     const left = $('panel-left');
