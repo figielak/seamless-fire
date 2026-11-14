@@ -119,6 +119,7 @@ import Base from '../layouts/Base.astro';
         <button type="button" role="tab" data-tab="calendar" aria-selected="true">Calendar</button>
         <button type="button" role="tab" data-tab="annual" aria-selected="false">Per year</button>
         <button type="button" role="tab" data-tab="season" aria-selected="false">This season</button>
+        <button type="button" role="tab" data-tab="forecast" aria-selected="false">Next 7 days</button>
         <button type="button" role="tab" data-tab="anomalies" aria-selected="false">Top anomalies</button>
         <button type="button" role="tab" data-tab="about" aria-selected="false">How to read it</button>
       </div>
@@ -144,6 +145,12 @@ import Base from '../layouts/Base.astro';
           <p class="unit">Fire cell-days since 1 January, this year against the VIIRS years (VIIRS S-NPP scale).</p>
           <div id="season" class="annual"></div>
           <p class="note" id="season-note"></p>
+        </div>
+        <div class="tab" data-tab="forecast" hidden>
+          <p class="unit">Expected fire cell-days per day for the whole country, from the fire weather forecast, starting the day after the last fire data (VIIRS S-NPP scale).</p>
+          <p id="forecast-head" class="forecast-head"></p>
+          <div id="forecast" class="annual"></div>
+          <p class="note" id="forecast-note"></p>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
           <p class="unit">Months most above their usual level, in the selected period. Click a row to map it.</p>
@@ -682,6 +689,16 @@ import Base from '../layouts/Base.astro';
   .trend p {
     margin: 0.3rem 0;
   }
+  .forecast-head {
+    margin: 0.2rem 0 0.4rem;
+  }
+  .forecast-head .flag {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    background: #fff4d6;
+    font-size: 0.82rem;
+  }
   .trend-months {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
@@ -1052,6 +1069,7 @@ import Base from '../layouts/Base.astro';
   const noteEl = $('calendar-note');
   const annualEl = $('annual');
   const seasonEl = $('season');
+  const forecastEl = $('forecast');
   const annualNote = $('annual-note');
   const anomEl = $('anomalies');
   const customEl = $('custom');
@@ -1636,6 +1654,112 @@ import Base from '../layouts/Base.astro';
       : 'Not enough data for this view.';
   }
 
+  // ------------------------------------------------------------------ next 7 days
+
+  interface ForecastDay { date: string; value: number; lo: number; hi: number; typical: number; fwi: number; skill: number }
+  interface Forecast {
+    issued: string; data_through: string; weather_state: string; days: ForecastDay[];
+    week: { value: number; typical: number; lo: number; hi: number; skill: number; corr: number; corr_typical: number };
+    perfect_skill: number; trained: string; tested: string; sources: string;
+  }
+  const forecastCache = new Map<string, Promise<Forecast | null>>();
+  let forecastToken = 0;
+
+  function loadForecast(code: string): Promise<Forecast | null> {
+    let pr = forecastCache.get(code);
+    if (!pr) {
+      // no file = no validated forecast for this country (not an error)
+      pr = fetch(dataUrl(`${code}/forecast.json`)).then((r) => (r.ok ? (r.json() as Promise<Forecast>) : null));
+      pr.catch(() => forecastCache.delete(code));
+      forecastCache.set(code, pr);
+    }
+    return pr;
+  }
+
+  async function renderForecast() {
+    if (!current || !forecastEl.offsetParent) return; // hidden tab: rendered when shown
+    const token = ++forecastToken;
+    const { country } = current;
+    const head = $('forecast-head');
+    const note = $('forecast-note');
+    const Plotly = await plotly();
+    const clear = (msg: string) => {
+      Plotly.purge(forecastEl);
+      forecastEl.hidden = true;
+      head.textContent = '';
+      note.innerHTML = msg;
+    };
+    if (country.code === WORLD_CODE) return clear('The forecast is made per country: choose one country.');
+    let f: Forecast | null = null;
+    try {
+      f = await loadForecast(country.code);
+    } catch (err) {
+      console.error(err);
+      if (token === forecastToken) clear('The forecast could not be loaded. Try again later.');
+      return;
+    }
+    if (token !== forecastToken || !current) return;
+    if (!f) {
+      return clear(`No forecast for ${escapeHtml(country.name)}: its fire weather model did not pass the check against real
+        weather forecasts (in Australia and Canada one weather average for a whole continent explains little of the daily fire activity).`);
+    }
+    forecastEl.hidden = false;
+    const label = (iso: string) => {
+      const dt = new Date(`${iso}T00:00:00Z`);
+      return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dt.getUTCDay()]} ${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
+    };
+    const x = f.days.map((d) => label(d.date));
+    const w = f.week;
+    const r = (w.value + 1) / (w.typical + 1);
+    const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
+    const dShort = (iso: string) => { const dt = new Date(`${iso}T00:00:00Z`); return `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`; };
+    head.innerHTML = `${escapeHtml(country.name)}, the 7 days after the last data day (${dShort(f.data_through)}): about <b>${fmt(w.value)}</b> fire cell-days
+      (80% range ${fmt(w.lo)}–${fmt(w.hi)}), <b>${word}</b> the typical ${fmt(w.typical)} for these days.` +
+      (current.h.area ? ' <span class="flag">whole country, not the selected area</span>' : '') +
+      (Date.now() - Date.parse(`${f.issued}T00:00:00Z`) >= 86_400_000
+        ? ` <span class="flag">forecast made on ${dShort(f.issued)} with that day's weather forecast; some of these days are already past</span>` : '');
+    const data: Partial<Plotly.Data>[] = [
+      {
+        type: 'bar', name: 'expected', x, y: f.days.map((d) => d.value), marker: { color: '#e8432e' },
+        error_y: {
+          type: 'data', symmetric: false, color: '#57606a', thickness: 1.2, width: 4,
+          array: f.days.map((d) => d.hi - d.value), arrayminus: f.days.map((d) => d.value - d.lo),
+        },
+        text: f.days.map((d) => `<b>${label(d.date)}</b><br>expected ${fmt(d.value)} (80%: ${fmt(d.lo)}–${fmt(d.hi)})<br>typical day ${fmt(d.typical)}<br>Fire Weather Index ${d.fwi.toFixed(1)}<br>measured skill ${Math.round(d.skill * 100)}%`),
+        hovertemplate: '%{text}<extra></extra>', textposition: 'none',
+      } as Partial<Plotly.Data>,
+      {
+        type: 'scatter', mode: 'lines+markers', name: 'typical day (2012–2025)', x, y: f.days.map((d) => d.typical),
+        line: { color: '#00224e', width: 2, dash: 'dash' }, marker: { size: 5 }, hoverinfo: 'skip',
+      },
+    ];
+    const layout: Partial<Plotly.Layout> = {
+      height: 300,
+      margin: { l: 60, r: 10, t: 10, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
+      xaxis: { fixedrange: true },
+      yaxis: { fixedrange: true, title: { text: 'cell-days per day' }, rangemode: 'tozero', gridcolor: '#e5e8ec' },
+      legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom' },
+      bargap: 0.35,
+    };
+    await Plotly.react(forecastEl, data as Plotly.Data[], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+      toImageButtonOptions: { filename: `seamless-fire-${country.code}-forecast-${f.issued}` },
+    });
+    if (token !== forecastToken) return;
+    const sk = f.days.map((d) => `${Math.round(d.skill * 100)}%`);
+    note.innerHTML = `Issued ${f.issued}, continuing from the fire data through ${f.data_through}. Expected value = the model's typical outcome for the forecast weather (a median, so
+      single big fire days can be much higher); bars show the 80% range. The model links daily fire activity to the
+      Canadian Fire Weather Index and weather where fires usually happen, beyond the normal seasonal level.
+      <b>Measured skill</b> on real archived forecasts (${f.tested.replace('..', '–')}), improvement over the typical day:
+      day 1 ${sk[0]}, day 3 ${sk[2]}, day 5 ${sk[4]}, day 7 ${sk[6]}${f.week.skill < 0.1 ? '; the 7-day total adds little to the typical level here' : ''}.
+      Weather: NASA POWER (fire weather state to ${f.weather_state}) and forecasts from
+      <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).`;
+  }
+
   // ------------------------------------------------------------------ anomalies
 
   function renderAnomalies(h: Harmonized, fromIdx: number, toIdx: number) {
@@ -2040,7 +2164,7 @@ import Base from '../layouts/Base.astro';
   function resizeCharts() {
     if (!plotlyPromise) return;
     plotlyPromise.then((Plotly) => {
-      for (const el of [calEl, annualEl, seasonEl]) {
+      for (const el of [calEl, annualEl, seasonEl, forecastEl]) {
         if (el.offsetParent && (el as unknown as { data?: unknown }).data) Plotly.Plots.resize(el);
       }
     });
@@ -2055,6 +2179,7 @@ import Base from '../layouts/Base.astro';
       bodies.forEach((b) => (b.hidden = b.dataset.tab !== t.dataset.tab));
       if (t.dataset.tab === 'calendar') rerenderCalendar();
       if (t.dataset.tab === 'season') void renderSeason();
+      if (t.dataset.tab === 'forecast') void renderForecast();
       resizeCharts();
     }));
     const left = $('panel-left');
@@ -2263,6 +2388,8 @@ import Base from '../layouts/Base.astro';
       await renderAnnual(country, d, hv, fromIdx, toIdx);
       if (id !== requestId) return;
       await renderSeason();
+      if (id !== requestId) return;
+      await renderForecast();
       if (id !== requestId) return;
       status.textContent = '';
       console.info(`[seamless-fire] ${country.code}: first chart ${(performance.now() - t0).toFixed(0)} ms after select`);

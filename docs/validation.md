@@ -474,7 +474,48 @@ by 3.8%/yr (2001–2025, p = 0.009) and 10%/yr in the VIIRS years (p = 0.02), wi
 burning, −5.5%/yr) and August (−6.7%/yr) significant. Caveats: p assumes independent years; the trend
 of a small area rests on few cell-days; the period of the trend follows the selected date range.
 
-## 15. Summary
+## 15. Fire activity forecast (`pipeline/forecast_*.py`, "Next 7 days" tab)
+
+Daily S-NPP cell-days of a country = climatology (mean log1p by day of year) + a ridge regression per season
+on fire-weighted weather features: the Canadian Fire Weather Index system (FFMC, DMC, DC, ISI, BUI, FWI,
+own implementation, `pipeline/fwi.py`, checked on the reference day of Van Wagner 1987), Tmax, RH min, wind,
+VPD, dry days, 7-day rain. Weather: NASA POWER (MERRA-2) at the 1° grid centres where fires happen (weight =
+share of 2012–2025 cell-days in the 1° box; 12 points).
+
+**Upper bound (observed weather, LOYO 2012–2025, `forecast_check.py`).** R² of daily log1p cell-days:
+
+| | PL | PT | ES | GR | UA | CL | CA | AU |
+|---|---|---|---|---|---|---|---|---|
+| season only | 0.28 | 0.05 | 0.08 | 0.14 | 0.54 | 0.26 | 0.49 | 0.31 |
+| with weather | 0.58 | 0.53 | 0.48 | 0.44 | 0.74 | 0.56 | 0.62 | 0.38 |
+
+Best single predictors everywhere: RH min (r = −0.51 to −0.63 with daily anomalies) and FFMC/ISI. In AU and CA
+one weather average for a continent adds little (the 40 points cover 30% and 20% of the fire activity).
+
+**Real forecasts (`forecast_skill.py`).** Trained on 2012–2023, tested on 2024–2025 with archived numerical
+forecasts (Open-Meteo Previous Runs API, the run issued L days before). FWI codes start from the observed state
+and continue with forecast weather. Forecast weather is bias-corrected per lead day, point and calendar month
+against POWER (the archive switches weather models with lead: on day 7 RH is 5 points lower and rain 40% less;
+a lead-0 correction alone gave a false skill of −0.53 on day 7 in PT). Skill = 1 − SSE / SSE of climatology:
+
+| Day ahead | 1 | 2 | 3 | 4 | 5 | 6 | 7 | observed weather | 7-day total, corr (climatology) |
+|---|---|---|---|---|---|---|---|---|---|
+| PT | 0.32 | 0.30 | 0.29 | 0.27 | 0.22 | 0.18 | 0.18 | 0.41 | 0.76 (0.37) |
+| PL | 0.15 | 0.23 | 0.21 | 0.21 | 0.14 | 0.12 | 0.04 | 0.25 | 0.79 (0.76) |
+
+Portugal keeps most of the upper bound for 6 days; in Poland the gain is small and the 7-day total adds nothing
+to the seasonal level. ES, GR, UA, CL: measurement running (free API rate limits); AU, CA: no forecast.
+
+**Operation.** DC carries months of memory: restarting the codes 92 days before a day from start-up values
+leaves DC wrong by 86–106 units on average, so the state per point is stored (`live/forecast/state_{CC}.json`)
+and moved forward every day with NASA POWER only (about 3 days behind). The forecast starts the day after the
+last fire data day; the days between the state and that day use Open-Meteo lead 0. If the issue day is already
+past, the forecast issued on that day is taken from the archive (no later weather). The interval (80%) comes from
+the residual SD per lead in the test. Hindcast autumn 2026 (PT, POWER weather): correlation 0.38 with the daily
+observations vs −0.19 for climatology; it caught the burst of 1–5 Nov (predicted 4–6 per day vs typical 1.3,
+observed 7–29) and the wet week after it, but underestimates peaks (it predicts a typical outcome, not extremes).
+
+## 16. Summary
 
 | Confidence in 2000–2011 estimates | Countries | Why |
 |---|---|---|

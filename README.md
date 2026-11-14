@@ -30,6 +30,9 @@ pixels and detects several times more fire, so joining the two records naively m
 - **"Now" panel**: the current month so far compared with the same days in earlier years (median, usual
   range, percentile), plus the last full month.
 - **This season**: fire activity since 1 January against the usual range of 2012–2025.
+- **Next 7 days**: expected fire activity per day for the country, from the Canadian Fire Weather Index
+  computed from weather forecasts, with an 80% range and its skill measured on real archived forecasts
+  (countries where the check passed; see `docs/validation.md` §15).
 - **Per-year chart** with uncertainty and **trends**: the change per year (Theil–Sen, Mann–Kendall test) for the
   whole period and for the VIIRS years alone, and for each calendar month (e.g. April burning declines).
 - **Top 10 anomalies**: months most above their usual level.
@@ -84,6 +87,10 @@ Daily update: a GitHub Actions job (`.github/workflows/update-live.yml`, 05:30 U
 NOAA-20 near real-time file, keeps the points inside each country (Natural Earth borders rasterized to 0.01°,
 `pipeline/borders.py`), removes known industrial sites, adds the new detections (`pipeline/live_update.py`),
 commits only when something changed, and redeploys the site. No raw data are needed for this step.
+The same job updates the forecast (`pipeline/forecast_update.py`): it moves the stored fire weather codes
+forward with NASA POWER days, adds the Open-Meteo forecast (bias-corrected per lead day) and writes
+`public/data/{CC}/forecast.json`. The forecast model of a country is built locally with
+`pipeline/forecast_model.py` (after `pipeline/forecast_skill.py` has measured its skill).
 
 ## Run locally
 
@@ -122,6 +129,10 @@ Deployment: every push to `main` builds the site and publishes it on GitHub Page
   NOAA-20). We acknowledge the use of data from NASA's Fire Information for Resource Management System
   (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS).
   <https://firms.modaps.eosdis.nasa.gov/>
+- **NASA POWER** daily weather (MERRA-2) for the fire weather history and training of the forecast.
+  <https://power.larc.nasa.gov/>
+- **Open-Meteo** weather forecasts and archived forecasts: [Weather data by Open-Meteo.com](https://open-meteo.com/),
+  licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Natural Earth** 1:10m Admin 0 countries (public domain), used to assign near real-time points to
   countries. <https://www.naturalearthdata.com/>
 - **EFFIS** national statistics, used only for an independent check of 2000–2011: San-Miguel-Ayanz, J.

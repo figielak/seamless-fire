@@ -1,7 +1,9 @@
 name: Update near real-time data
 
 # Daily: FIRMS global NOAA-20 near real-time file -> live/, public/data/{CC}/live.json and
-# hotspots/live.csv (pipeline/live_update.py). Commits only when the data changed, then deploys.
+# hotspots/live.csv (pipeline/live_update.py); fire activity forecast from NASA POWER and Open-Meteo
+# weather -> live/forecast/state_{CC}.json, public/data/{CC}/forecast.json (pipeline/forecast_update.py).
+# Commits only when the data changed, then deploys.
 # A push made with GITHUB_TOKEN does not start other workflows, so the deploy is called here.
 
 on:
@@ -30,11 +32,15 @@ jobs:
           python-version: "3.13"
       - run: pip install "pandas>=2.2" "numpy>=2.0"
       - name: Tests of the update logic
-        run: python -m unittest pipeline/tests/test_live.py pipeline/tests/test_borders.py
+        run: python -m unittest pipeline/tests/test_live.py pipeline/tests/test_borders.py pipeline/tests/test_forecast.py
         env:
           PYTHONPATH: pipeline
       - name: Download and merge
         run: python pipeline/live_update.py
+      - name: Fire activity forecast
+        # Weather services down: keep the previous forecast (the site flags its date), still publish fire data.
+        continue-on-error: true
+        run: python pipeline/forecast_update.py
       - id: commit
         name: Commit if changed
         run: |
@@ -47,7 +53,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add live public/data
-          git commit -m "Update near real-time data (through $through)"
+          git commit -m "Update near real-time data and forecast (through $through)"
           git pull --rebase origin main
           git push origin HEAD:main
           echo "changed=true" >> "$GITHUB_OUTPUT"
