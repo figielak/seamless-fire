@@ -597,6 +597,12 @@ import Base from '../layouts/Base.astro';
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
+  // Fixed map colour scales (log), shared by all countries. A cell has at most 31 cell-days in
+  // a month; per-cell 99th percentiles are 6–15 per month and 4–19 per year (2012–2025, 8 countries).
+  const MAP_SCALE = {
+    month: { max: 31, unit: 'cell-days in the month per 0.1° cell, log scale' },
+    period: { max: 30, unit: 'cell-days per year per 0.1° cell (period average), log scale' },
+  };
   const FIRMS_URL = 'https://firms.modaps.eosdis.nasa.gov/download/';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1031,15 +1037,24 @@ import Base from '../layouts/Base.astro';
       title = `${monthLabel(monthStr(selAbs))} · ${kind}`;
       label.textContent = monthLabel(monthStr(selAbs));
     } else {
-      title = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))} · total`;
+      title = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))} · average per year`;
       label.textContent = 'Whole period';
     }
     $<HTMLButtonElement>('map-prev').disabled = mapMode !== 'month' || i <= fromIdx;
     $<HTMLButtonElement>('map-next').disabled = mapMode !== 'month' || i >= toIdx;
     markCalendar();
     if (!areaMap) return;
-    const layer = mapMode === 'month' ? cellLayer(d.cells, hc, i, i) : cellLayer(d.cells, hc, fromIdx, toIdx);
-    areaMap.setCells(layer, title);
+    if (mapMode === 'month') {
+      areaMap.setCells(cellLayer(d.cells, hc, i, i), title, MAP_SCALE.month);
+    } else {
+      // Whole period: average per year, so the colour scale does not depend on the period length.
+      const layer = cellLayer(d.cells, hc, fromIdx, toIdx);
+      const perYear = 12 / layer.months;
+      for (let j = 0; j < layer.value.length; j++) layer.value[j] *= perYear;
+      layer.max *= perYear;
+      layer.total *= perYear;
+      areaMap.setCells(layer, title, MAP_SCALE.period);
+    }
   }
 
   /** Red square on the calendar month shown on the map (trace 3). */

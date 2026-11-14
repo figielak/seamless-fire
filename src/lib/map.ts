@@ -45,10 +45,11 @@ class CellCanvas extends L.Layer {
   private data: CellLayer | null = null;
   private colors: string[] = [];
 
-  setData(data: CellLayer | null) {
+  /** Colours on a fixed scale [0, max] (same for every country); larger values get the top colour. */
+  setData(data: CellLayer | null, max: number) {
     this.data = data;
     this.colors = [];
-    if (data) for (let j = 0; j < data.value.length; j++) this.colors.push(fireColor(fireT(data.value[j], data.max)));
+    if (data) for (let j = 0; j < data.value.length; j++) this.colors.push(fireColor(fireT(data.value[j], max)));
     if (this._map) this.redraw();
   }
 
@@ -116,7 +117,7 @@ export class AreaMap {
   private cells = new CellCanvas();
   private legend: HTMLElement;
   private lookup: ((lat: number, lon: number) => number) | null = null;
-  private layerInfo = { title: '', unit: '', max: 0 };
+  private layerInfo = { title: '', unit: '', max: 0, empty: true };
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
     this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
@@ -155,17 +156,20 @@ export class AreaMap {
     this.map.setView([50, 15], 4);
   }
 
-  /** Fire cell layer; title says what it shows (month or period, observed or estimated). */
-  setCells(layer: CellLayer | null, title: string) {
-    this.cells.setData(layer);
+  /**
+   * Fire cell layer on a fixed colour scale [0, scale.max] shared by all countries.
+   * Title says what it shows (month or period, observed or estimated); unit labels the values.
+   */
+  setCells(layer: CellLayer | null, title: string, scale: { max: number; unit: string }) {
+    this.cells.setData(layer, scale.max);
     this.lookup = layer ? cellLookup(layer) : null;
-    this.layerInfo = { title, unit: layer && layer.months > 1 ? 'cell-days in the period' : 'cell-days', max: layer?.max ?? 0 };
+    this.layerInfo = { title, unit: scale.unit, max: scale.max, empty: !layer || layer.value.length === 0 };
     this.hover(null);
   }
 
   private hover(ll: L.LatLng | null) {
-    const { title, unit, max } = this.layerInfo;
-    const ticks = [1, 3, 10, 30, 100, 300, 1000, 3000, 10000].filter((t) => t < max);
+    const { title, unit, max, empty } = this.layerInfo;
+    const ticks = [1, 3, 10].filter((t) => t < max * 0.8);
     const ramp = Array.from({ length: 11 }, (_, i) => fireColor(i / 10)).join(',');
     let cell = 'Hover a cell for its value';
     if (ll && this.lookup) {
@@ -175,15 +179,13 @@ export class AreaMap {
       cell = `Cell ${lat0.toFixed(1)}…${(lat0 + 0.1).toFixed(1)}°, ${lon0.toFixed(1)}…${(lon0 + 0.1).toFixed(1)}°: ` +
         `<b>${v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
     }
-    this.legend.innerHTML = max > 0
-      ? `<div class="lg-title">${title}</div>
+    this.legend.innerHTML = `<div class="lg-title">${title}</div>
         <div class="lg-bar" style="background:linear-gradient(90deg,${ramp})"></div>
-        <div class="lg-ticks"><span>0</span>${ticks.filter((_, i) => i % 2 === 0).map((t) =>
-          `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t >= 1000 ? `${t / 1000}k` : t}</span>`).join('')}
-          <span style="left:100%">${max >= 1000 ? `${(max / 1000).toFixed(1)}k` : Math.round(max)}</span></div>
-        <div class="lg-unit">${unit}, log scale</div>
-        <div class="lg-cell">${cell}</div>`
-      : `<div class="lg-title">${title || 'No fire cells'}</div><div class="lg-unit">No fire cells in this selection</div>`;
+        <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
+          `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
+          <span style="left:100%">${max}+</span></div>
+        <div class="lg-unit">${unit}; same scale for all countries</div>
+        <div class="lg-cell">${empty ? 'No fire cells in this selection' : cell}</div>`;
   }
 
   /** Show the country frame and the area; fit the view when the selection changed. */
