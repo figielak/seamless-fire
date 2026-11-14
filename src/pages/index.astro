@@ -9,11 +9,42 @@ import Base from '../layouts/Base.astro';
     put on one scale, so years before and after 2012 can be compared.
   </p>
 
-  <div class="controls">
-    <label for="country">Country</label>
-    <select id="country" disabled><option>Loading…</option></select>
-    <span id="status" class="status" role="status"></span>
-  </div>
+  <section class="card setup" aria-label="Area and period">
+    <div class="row">
+      <label for="country">Country</label>
+      <select id="country" disabled><option>Loading…</option></select>
+      <span id="status" class="status" role="status"></span>
+    </div>
+
+    <fieldset class="row">
+      <legend>Area</legend>
+      <label class="radio"><input type="radio" name="mode" value="country" checked /> Whole country</label>
+      <label class="radio"><input type="radio" name="mode" value="custom" /> Custom area</label>
+    </fieldset>
+
+    <div id="custom" class="custom" hidden>
+      <div class="row">
+        <label for="preset">Example</label>
+        <select id="preset"></select>
+      </div>
+      <form id="rect" class="row rect" autocomplete="off">
+        <span class="lbl">Rectangle (degrees)</span>
+        <label>W <input name="w" inputmode="decimal" size="7" /></label>
+        <label>S <input name="s" inputmode="decimal" size="7" /></label>
+        <label>E <input name="e" inputmode="decimal" size="7" /></label>
+        <label>N <input name="n" inputmode="decimal" size="7" /></label>
+        <button type="submit">Apply</button>
+      </form>
+      <p id="area-note" class="note"></p>
+    </div>
+
+    <div class="row period">
+      <span class="lbl">Period</span>
+      <label>From <select id="from-m" class="small"></select><select id="from-y" class="small"></select></label>
+      <label>To <select id="to-m" class="small"></select><select id="to-y" class="small"></select></label>
+      <button type="button" id="full-period">Full period</button>
+    </div>
+  </section>
 
   <section id="now" class="card now" aria-live="polite" hidden></section>
 
@@ -21,6 +52,32 @@ import Base from '../layouts/Base.astro';
     <h2>Calendar <span class="unit">fire cell-days per month, VIIRS S-NPP scale</span></h2>
     <div id="calendar" class="calendar"></div>
     <p class="note" id="calendar-note"></p>
+  </section>
+
+  <section class="card">
+    <h2>Per year <span class="unit">sum of monthly cell-days, ~80% interval for estimated years</span></h2>
+    <div id="annual" class="annual"></div>
+    <p class="note" id="annual-note"></p>
+  </section>
+
+  <section class="card">
+    <h2>Top 10 anomalies <span class="unit">months most above their usual level, in the selected period</span></h2>
+    <div id="anomalies"></div>
+    <p class="note">
+      × typical = (value + k) / (median + k), median of the same calendar month in the 10 years
+      before. k is a small offset that scales with the area, so tiny counts do not explode.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Download</h2>
+    <div class="row">
+      <button type="button" id="dl-monthly">Monthly series (CSV)</button>
+      <button type="button" id="dl-hotspots">Hotspots (CSV)</button>
+      <button type="button" id="dl-cancel" hidden>Cancel</button>
+      <span id="dl-status" class="status" role="status"></span>
+    </div>
+    <p class="note" id="dl-note"></p>
   </section>
 
   <section class="card about">
@@ -36,6 +93,11 @@ import Base from '../layouts/Base.astro';
         (hover shows the ~80% interval).
       </li>
       <li>
+        <b>Custom area</b>: a cell counts when its center is inside the area. Before 2012 the area gets
+        its share of the country estimate (area MODIS / country MODIS). Small areas are much less
+        certain than whole countries.
+      </li>
+      <li>
         Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
         (Aug–Sep 2020), S-NPP outage (Jul–Aug 2022).
       </li>
@@ -43,25 +105,163 @@ import Base from '../layouts/Base.astro';
   </section>
 </Base>
 
+<style>
+  .setup .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.8rem;
+    align-items: center;
+    margin: 0 0 0.7rem;
+  }
+  .setup fieldset {
+    border: 0;
+    padding: 0;
+  }
+  .setup legend {
+    float: left;
+    font-weight: 600;
+    margin-right: 0.4rem;
+  }
+  .setup .lbl,
+  .setup label[for] {
+    font-weight: 600;
+  }
+  .setup .radio {
+    font-weight: 400;
+  }
+  .custom {
+    border-left: 3px solid var(--line);
+    padding-left: 0.8rem;
+    margin-bottom: 0.7rem;
+  }
+  .rect input {
+    font: inherit;
+    width: 5.5rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .period label {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+  }
+  .annual {
+    width: 100%;
+    min-height: 320px;
+  }
+</style>
+
+<style is:global>
+  select.small {
+    min-width: 0;
+  }
+  button {
+    font: inherit;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--card);
+    cursor: pointer;
+  }
+  button:hover {
+    border-color: var(--muted);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  table.anom {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.92rem;
+  }
+  table.anom th,
+  table.anom td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+  }
+  table.anom th:nth-child(2),
+  table.anom td:nth-child(2),
+  table.anom td:last-child,
+  table.anom th:last-child {
+    text-align: left;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  .warn {
+    color: var(--accent);
+  }
+</style>
+
 <script>
-  import { fetchJson, loadCountry, type Country, type CountryData } from '../lib/data';
-  import { harmonize, monthAbs, monthCount, monthlyTotals, type Harmonized } from '../lib/harmonize';
-  import { monthStats } from '../lib/stats';
+  import { dataUrl, fetchJson, loadCountry, type Country, type CountryData } from '../lib/data';
+  import {
+    annualTotals,
+    coverageSpan,
+    harmonize,
+    harmonizeArea,
+    monthAbs,
+    monthCount,
+    monthlyTotals,
+    monthStr,
+    type Harmonized,
+  } from '../lib/harmonize';
+  import {
+    AreaError,
+    PRESETS,
+    bboxOverlap,
+    keepFn,
+    normalizeRect,
+    parseHash,
+    resolveShape,
+    serializeHash,
+    shapeBBox,
+    type AreaSpec,
+    type ViewState,
+  } from '../lib/geo';
+  import { monthStats, topAnomalies } from '../lib/stats';
+  import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const MONTHS_LONG = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
+  const FIRMS_URL = 'https://firms.modaps.eosdis.nasa.gov/download/';
 
-  const select = document.getElementById('country') as HTMLSelectElement;
-  const status = document.getElementById('status')!;
-  const nowEl = document.getElementById('now')!;
-  const calEl = document.getElementById('calendar')!;
-  const noteEl = document.getElementById('calendar-note')!;
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const select = $<HTMLSelectElement>('country');
+  const status = $('status');
+  const nowEl = $('now');
+  const calEl = $('calendar');
+  const noteEl = $('calendar-note');
+  const annualEl = $('annual');
+  const annualNote = $('annual-note');
+  const anomEl = $('anomalies');
+  const customEl = $('custom');
+  const presetSel = $<HTMLSelectElement>('preset');
+  const rectForm = $<HTMLFormElement>('rect');
+  const areaNote = $('area-note');
+  const fromM = $<HTMLSelectElement>('from-m');
+  const fromY = $<HTMLSelectElement>('from-y');
+  const toM = $<HTMLSelectElement>('to-m');
+  const toY = $<HTMLSelectElement>('to-y');
+  const dlMonthly = $<HTMLButtonElement>('dl-monthly');
+  const dlHotspots = $<HTMLButtonElement>('dl-hotspots');
+  const dlCancel = $<HTMLButtonElement>('dl-cancel');
+  const dlStatus = $('dl-status');
+  const dlNote = $('dl-note');
+  const modeRadios = [...document.querySelectorAll<HTMLInputElement>('input[name=mode]')];
 
   let countries: Country[] = [];
   let requestId = 0;
+  let state: ViewState = { code: 'PL', area: { kind: 'country' } };
+  let lastCustom: AreaSpec | null = null; // restored when switching back to "Custom area"
+  let current: { country: Country; d: CountryData; h: Harmonized; fromIdx: number; toIdx: number } | null = null;
+  let exportJob: AbortController | null = null;
   let plotlyPromise: Promise<typeof import('plotly.js-dist-min')['default']> | null = null;
 
   function plotly() {
@@ -75,10 +275,23 @@ import Base from '../layouts/Base.astro';
     const [y, m] = ym.split('-').map(Number);
     return `${MONTHS_LONG[m - 1]} ${y}`;
   };
-  const ordinalPct = (p: number) => `${Math.round(p)}%`;
+  const shortMonth = (ym: string) => {
+    const [y, m] = ym.split('-').map(Number);
+    return `${MONTHS[m - 1]} ${y}`;
+  };
 
   function escapeHtml(s: string) {
     return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  }
+
+  function areaLabel(a: AreaSpec): string | null {
+    if (a.kind === 'country') return null;
+    if (a.kind === 'preset') return PRESETS.find((p) => p.id === a.id)?.name ?? a.id;
+    return a.shape.kind === 'rect' ? 'custom rectangle' : 'custom polygon';
+  }
+
+  function areaSlug(a: AreaSpec): string {
+    return a.kind === 'country' ? 'country' : a.kind === 'preset' ? a.id : a.shape.kind === 'rect' ? 'rectangle' : 'polygon';
   }
 
   // ------------------------------------------------------------------ "Now" panel
@@ -101,7 +314,7 @@ import Base from '../layouts/Base.astro';
           <dt>Typical ${calName} (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd>
           <dt>Usual range in those years (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd>
           <dt>Rank among ${s.nAll} ${calName}s since 2000</dt>
-          <dd>higher than ${ordinalPct(s.percentile)}</dd>
+          <dd>higher than ${Math.round(s.percentile)}%</dd>
         </dl>`;
     }
     const interval = h.estimated[idx]
@@ -111,8 +324,9 @@ import Base from '../layouts/Base.astro';
       h.preliminary[idx] ? 'preliminary data (near real-time)' : '',
       h.lowQuality[idx] ? 'known sensor problem this month' : '',
     ].filter(Boolean);
+    const label = areaLabel(state.area);
     nowEl.innerHTML = `
-      <h2>Now: ${escapeHtml(country.name)}, ${monthLabel(s.month)}</h2>
+      <h2>Now: ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}, ${monthLabel(s.month)}</h2>
       <div class="now-grid">
         <div>
           <p class="value">${fmt(s.value)} <span>fire cell-days</span></p>
@@ -123,17 +337,17 @@ import Base from '../layouts/Base.astro';
       </div>
       <p class="note">Latest complete month in the data
         (${escapeHtml(d.model.last_complete_month)}). Model ${escapeHtml(d.model.model)},
-        VIIRS S-NPP scale.</p>`;
+        VIIRS S-NPP scale.${h.area ? ' Custom area: higher uncertainty than for the whole country.' : ''}</p>`;
     nowEl.hidden = false;
   }
 
   // ------------------------------------------------------------------ calendar
 
-  async function renderCalendar(country: Country, d: CountryData, h: Harmonized) {
+  async function renderCalendar(country: Country, d: CountryData, h: Harmonized, fromIdx: number, toIdx: number) {
     const Plotly = await plotly();
     const first = monthAbs(h.firstMonth);
-    const y0 = Math.floor(first / 12);
-    const y1 = Math.floor((first + h.value.length - 1) / 12);
+    const y0 = Math.floor((first + fromIdx) / 12);
+    const y1 = Math.floor((first + toIdx) / 12);
     const years: number[] = [];
     for (let y = y0; y <= y1; y++) years.push(y);
 
@@ -142,18 +356,11 @@ import Base from '../layouts/Base.astro';
     const lowX: number[] = [], lowY: number[] = [];
     const preX: number[] = [], preY: number[] = [];
     // Months outside a sensor's raw-file coverage show "no data", not 0.
-    const cov = d.model.coverage ?? {};
-    const span = (sats: string[]) => {
-      const c = sats.map((x) => cov[x]).filter(Boolean);
-      return c.length
-        ? [Math.min(...c.map((x) => monthAbs(x[0].slice(0, 7)))), Math.max(...c.map((x) => monthAbs(x[1].slice(0, 7))))]
-        : [-Infinity, Infinity];
-    };
-    const [modisFrom, modisTo] = span(['Terra', 'Aqua']);
-    const [viirsFrom, viirsTo] = span(['SNPP']);
+    const [modisFrom, modisTo] = coverageSpan(d.model, ['Terra', 'Aqua']) ?? [-Infinity, Infinity];
+    const [viirsFrom, viirsTo] = coverageSpan(d.model, ['SNPP']) ?? [-Infinity, Infinity];
     const raw = (v: number, a: number, from: number, to: number) => (a < from || a > to ? 'no data' : fmt(v));
     let max = 0;
-    for (let i = 0; i < h.value.length; i++) {
+    for (let i = fromIdx; i <= toIdx; i++) {
       const a = first + i;
       const r = Math.floor(a / 12) - y0;
       const c = a % 12;
@@ -175,7 +382,7 @@ import Base from '../layouts/Base.astro';
       text[r][c] = lines.join('<br>');
     }
 
-    const ticks = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000].filter((t) => t <= max * 1.05);
+    const ticks = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000].filter((t) => t <= Math.max(max, 1) * 1.05);
     const data: Partial<Plotly.Data>[] = [
       {
         type: 'heatmap',
@@ -184,9 +391,10 @@ import Base from '../layouts/Base.astro';
         z,
         text: text as unknown as string[],
         hovertemplate: '%{text}<extra></extra>',
+        hoverongaps: false,
         colorscale: 'Cividis',
         zmin: 0,
-        zmax: Math.log10(1 + max),
+        zmax: Math.log10(1 + Math.max(max, 1)),
         xgap: 1,
         ygap: 1,
         showlegend: false,
@@ -216,12 +424,13 @@ import Base from '../layouts/Base.astro';
     const path = vc === 0
       ? `M -0.5 ${vy - 0.5} L 11.5 ${vy - 0.5}`
       : `M -0.5 ${vy + 0.5} L ${vc - 0.5} ${vy + 0.5} L ${vc - 0.5} ${vy - 0.5} L 11.5 ${vy - 0.5}`;
+    const showStep = vf > first + fromIdx && vf <= first + toIdx;
     const lastEst = vf - 1;
-    const estLabel = `${MONTHS[first % 12]} ${y0} – ${MONTHS[lastEst % 12]} ${Math.floor(lastEst / 12)}`;
+    const estLabel = `${MONTHS[first % 12]} ${Math.floor(first / 12)} – ${MONTHS[lastEst % 12]} ${Math.floor(lastEst / 12)}`;
 
     const narrow = calEl.clientWidth < 560;
     const layout: Partial<Plotly.Layout> = {
-      height: Math.max(420, years.length * 20 + 110),
+      height: Math.max(260, years.length * 20 + 110),
       margin: { l: 44, r: 10, t: 28, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -232,27 +441,251 @@ import Base from '../layouts/Base.astro';
         side: 'top', range: [-0.5, 11.5], fixedrange: true, showgrid: false, zeroline: false,
       },
       yaxis: {
-        range: [y1 + 0.5, y0 - 0.5], dtick: narrow ? 2 : 1, fixedrange: true, showgrid: false,
+        range: [y1 + 0.5, y0 - 0.5], dtick: narrow && years.length > 12 ? 2 : 1, fixedrange: true, showgrid: false,
         zeroline: false,
       },
-      shapes: [{ type: 'path', path, line: { color: '#e8432e', width: 2.5 }, layer: 'above' }],
+      shapes: showStep ? [{ type: 'path', path, line: { color: '#e8432e', width: 2.5 }, layer: 'above' }] : [],
       legend: { orientation: 'h', x: 0, y: -0.02, yanchor: 'top' },
       showlegend: lowX.length + preX.length > 0,
     };
     await Plotly.react(calEl, data as Plotly.Data[], layout, {
       responsive: true, displaylogo: false,
       modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
-      toImageButtonOptions: { filename: `seamless-fire-${country.code}-calendar` },
+      toImageButtonOptions: { filename: `seamless-fire-${country.code}-${areaSlug(state.area)}-calendar` },
     });
-    noteEl.innerHTML =
-      `Above the red line (<b>${estLabel}</b>): estimated from MODIS. Below: observed VIIRS. ` +
-      `Color scale is logarithmic.`;
+    const parts = [];
+    if (vf > first + fromIdx) {
+      parts.push(showStep
+        ? `Above the red line (<b>${estLabel}</b>): estimated from MODIS. Below: observed VIIRS.`
+        : 'All shown months are estimated from MODIS.');
+    } else parts.push('All shown months are observed VIIRS.');
+    parts.push('Color scale is logarithmic.');
+    if (h.area) parts.push('Before 2012 the area gets its share of the country estimate (area MODIS / country MODIS).');
+    noteEl.innerHTML = parts.join(' ');
+  }
+
+  // ------------------------------------------------------------------ annual chart
+
+  async function renderAnnual(country: Country, d: CountryData, h: Harmonized, fromIdx: number, toIdx: number) {
+    const Plotly = await plotly();
+    const t = annualTotals(h, d.model, fromIdx, toIdx);
+    const hasInterval = t.map((x) => x.hi > x.lo);
+    const colors = t.map((x) => (x.estimated ? '#7f8fa6' : '#00224e'));
+    const hover = t.map((x) => {
+      const lines = [`<b>${x.year}</b>`, `${x.estimated ? 'Estimated' : 'Observed'}: <b>${fmt(x.value)}</b> cell-days`];
+      if (x.hi > x.lo) lines.push(`~80% interval: ${fmt(x.lo)} – ${fmt(x.hi)}`);
+      if (x.partial) lines.push(`Partial year: ${x.months} month${x.months === 1 ? '' : 's'}`);
+      return lines.join('<br>');
+    });
+    const data: Partial<Plotly.Data>[] = [
+      {
+        type: 'bar',
+        x: t.map((x) => x.year),
+        y: t.map((x) => x.value),
+        text: hover,
+        hovertemplate: '%{text}<extra></extra>',
+        textposition: 'none',
+        marker: {
+          color: colors,
+          pattern: { shape: t.map((x) => (x.partial ? '/' : '')), fgcolor: '#ffffff', size: 6 },
+        },
+        error_y: {
+          type: 'data', symmetric: false,
+          array: t.map((x, i) => (hasInterval[i] ? x.hi - x.value : 0)),
+          arrayminus: t.map((x, i) => (hasInterval[i] ? x.value - x.lo : 0)),
+          color: '#e8432e', thickness: 1.5, width: 3,
+        },
+      } as Partial<Plotly.Data>,
+    ];
+    const layout: Partial<Plotly.Layout> = {
+      height: 320,
+      margin: { l: 60, r: 10, t: 10, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
+      xaxis: { fixedrange: true, dtick: t.length > 14 ? 2 : 1 },
+      yaxis: { fixedrange: true, title: { text: 'cell-days' }, rangemode: 'tozero', gridcolor: '#e5e8ec' },
+      bargap: 0.15,
+      showlegend: false,
+    };
+    await Plotly.react(annualEl, data as Plotly.Data[], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+      toImageButtonOptions: { filename: `seamless-fire-${country.code}-${areaSlug(state.area)}-annual` },
+    });
+    const partial = t.filter((x) => x.partial).map((x) => x.year);
+    annualNote.innerHTML =
+      'Grey: estimated from MODIS, dark blue: observed VIIRS (2012 mixes one estimated month). ' +
+      (partial.length ? `Hatched: partial year (${partial.join(', ')}), not comparable with full years.` : '');
+  }
+
+  // ------------------------------------------------------------------ anomalies
+
+  function renderAnomalies(h: Harmonized, fromIdx: number, toIdx: number) {
+    const top = topAnomalies(h, fromIdx, toIdx, 10);
+    if (!top.length) {
+      anomEl.innerHTML = '<p class="note">Not enough history in the selected period.</p>';
+      return;
+    }
+    const rows = top.map((a, i) => {
+      const flags = [
+        a.estimated ? 'estimated' : '',
+        a.preliminary ? 'preliminary' : '',
+        a.lowQuality ? 'sensor problem' : '',
+      ].filter(Boolean).join(', ');
+      const r = a.ratio!;
+      return `<tr><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
+        <td><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td><td>${fmt(a.median!)}</td>
+        <td>${Math.round(a.percentile)}%</td><td>${flags}</td></tr>`;
+    });
+    anomEl.innerHTML = `<div class="table-wrap"><table class="anom">
+      <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th>× typical</th><th>Typical</th>
+      <th>Percentile</th><th>Notes</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  }
+
+  // ------------------------------------------------------------------ export
+
+  function download(name: string, text: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function updateExportNote() {
+    if (!current) return;
+    const { d, country } = current;
+    if (!d.model.hotspots) {
+      dlHotspots.disabled = true;
+      dlNote.innerHTML = `Hotspot files for ${escapeHtml(country.name)} are too large for this site. ` +
+        `Download them from <a href="${FIRMS_URL}" target="_blank" rel="noopener">NASA FIRMS</a>.`;
+      return;
+    }
+    dlHotspots.disabled = !!exportJob;
+    dlNote.textContent =
+      'Hotspots are filtered by their own coordinates, the series by 0.1° cell centers, so counts can differ ' +
+      'slightly at the area edge. Hotspots are vegetation fires only (industrial sources removed); ' +
+      '2026 has VIIRS only.';
+  }
+
+  async function startHotspotExport() {
+    if (!current || exportJob) return;
+    // Snapshot of the state at start: later changes on the page do not affect this file.
+    const { d, country, h, fromIdx, toIdx } = current;
+    const first = monthAbs(h.firstMonth);
+    const from = monthStr(first + fromIdx);
+    const to = monthStr(first + toIdx);
+    const shape = resolveShape(state.area);
+    const keep = shape ? keepFn(shape) : null;
+    const years = hotspotYears(d.model, from, to);
+    const name = `seamless-fire_${country.code}_${areaSlug(state.area)}_${from}_${to}_hotspots.csv`;
+    const job = new AbortController();
+    exportJob = job;
+    dlHotspots.disabled = true;
+    dlCancel.hidden = false;
+    dlStatus.textContent = `Hotspots: year 0 of ${years.length}…`;
+    try {
+      const res = await exportHotspots({
+        code: country.code, years, keep, from, to, signal: job.signal,
+        fetchText: async (path, signal) => {
+          const r = await fetch(dataUrl(path), { signal });
+          if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+          return r.text();
+        },
+        onProgress: (done, total, rows) => {
+          dlStatus.textContent = `Hotspots: year ${done} of ${total}, ${rows.toLocaleString('en-US')} rows…`;
+        },
+      });
+      download(name, res.csv);
+      dlStatus.textContent = `Saved ${res.rows.toLocaleString('en-US')} hotspots.`;
+    } catch (err) {
+      if (job.signal.aborted) dlStatus.textContent = 'Hotspot download cancelled, no file saved.';
+      else {
+        console.error(err);
+        dlStatus.textContent = 'Hotspot download failed, no file saved. Check the connection and try again.';
+      }
+    } finally {
+      exportJob = null;
+      dlCancel.hidden = true;
+      updateExportNote();
+    }
+  }
+
+  // ------------------------------------------------------------------ controls
+
+  function fillPeriodSelects(firstAbs: number, lastAbs: number) {
+    const opts = (vals: [string, string][]) => vals.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+    const months = opts(MONTHS.map((m, i) => [String(i + 1).padStart(2, '0'), m]));
+    const yearList: [string, string][] = [];
+    for (let y = Math.floor(firstAbs / 12); y <= Math.floor(lastAbs / 12); y++) yearList.push([String(y), String(y)]);
+    for (const s of [fromM, toM]) s.innerHTML = months;
+    for (const s of [fromY, toY]) s.innerHTML = opts(yearList);
+  }
+
+  function setPeriodSelects(from: string, to: string) {
+    fromY.value = from.slice(0, 4); fromM.value = from.slice(5, 7);
+    toY.value = to.slice(0, 4); toM.value = to.slice(5, 7);
+  }
+
+  function fillPresets(code: string) {
+    const list = PRESETS.filter((p) => p.country === code);
+    presetSel.innerHTML = '<option value="">(none)</option>' +
+      list.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    presetSel.disabled = !list.length;
+  }
+
+  function syncControls(country: Country) {
+    const custom = state.area.kind !== 'country';
+    modeRadios.forEach((r) => (r.checked = r.value === (custom ? 'custom' : 'country')));
+    customEl.hidden = !custom;
+    fillPresets(country.code);
+    presetSel.value = state.area.kind === 'preset' ? state.area.id : '';
+    const shape = custom ? resolveShape(state.area) : null;
+    const bb = shape ? shapeBBox(shape) : country.bbox;
+    const f = rectForm.elements as unknown as Record<'w' | 's' | 'e' | 'n', HTMLInputElement>;
+    if (!shape || shape.kind === 'rect') {
+      [f.w.value, f.s.value, f.e.value, f.n.value] = bb.map((v) => String(Math.round(v * 100) / 100));
+    }
+    const notes: string[] = [];
+    if (state.area.kind === 'preset') {
+      const p = PRESETS.find((x) => x.id === (state.area as { id: string }).id);
+      if (p) notes.push(escapeHtml(p.note));
+    }
+    if (shape?.kind === 'polygon' && state.area.kind === 'shape') notes.push('Custom polygon from the link.');
+    if (shape && !bboxOverlap(shapeBBox(shape), country.bbox)) {
+      notes.push(`<span class="warn">This area is outside ${escapeHtml(country.name)}: all values are 0.</span>`);
+    }
+    if (custom) notes.push('A 0.1° cell counts when its center is inside the area.');
+    areaNote.innerHTML = notes.join(' ');
+  }
+
+  function writeHash() {
+    history.replaceState(null, '', serializeHash(state));
+  }
+
+  function setState(next: Partial<ViewState>) {
+    state = { ...state, ...next };
+    if (state.area.kind !== 'country') lastCustom = state.area;
+    writeHash();
+    show();
+  }
+
+  function readPeriod(): { from: string; to: string } {
+    let from = `${fromY.value}-${fromM.value}`;
+    let to = `${toY.value}-${toM.value}`;
+    if (from > to) [from, to] = [to, from];
+    return { from, to };
   }
 
   // ------------------------------------------------------------------ flow
 
-  async function show(code: string) {
-    const country = countries.find((c) => c.code === code) ?? countries[0];
+  async function show() {
+    const country = countries.find((c) => c.code === state.code) ?? countries[0];
+    state.code = country.code;
     select.value = country.code;
     const id = ++requestId;
     status.textContent = `Loading ${country.name}…`;
@@ -261,21 +694,53 @@ import Base from '../layouts/Base.astro';
       const d = await loadCountry(country.code);
       if (id !== requestId) return; // a newer selection won
       const n = monthCount(d.cells.first_month, d.model.last_complete_month);
-      const h = harmonize(monthlyTotals(d.cells, n), d.model);
+      const hc = harmonize(monthlyTotals(d.cells, n), d.model);
+      let h = hc;
+      const shape = resolveShape(state.area);
+      if (shape) h = harmonizeArea(monthlyTotals(d.cells, n, keepFn(shape)), hc, d.model);
+
+      // Period: clamp to the data; full period is not written to the link.
+      const firstAbs = monthAbs(d.cells.first_month);
+      const lastAbs = firstAbs + n - 1;
+      const clamp = (ym: string | undefined, dflt: number) =>
+        ym ? Math.min(Math.max(monthAbs(ym), firstAbs), lastAbs) - firstAbs : dflt - firstAbs;
+      let fromIdx = clamp(state.from, firstAbs);
+      let toIdx = clamp(state.to, lastAbs);
+      if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
+      fillPeriodSelects(firstAbs, lastAbs);
+      setPeriodSelects(monthStr(firstAbs + fromIdx), monthStr(firstAbs + toIdx));
+      syncControls(country);
+
+      current = { country, d, h, fromIdx, toIdx };
       renderNow(country, d, h);
-      await renderCalendar(country, d, h);
+      renderAnomalies(h, fromIdx, toIdx);
+      updateExportNote();
+      await renderCalendar(country, d, h, fromIdx, toIdx);
+      if (id !== requestId) return;
+      await renderAnnual(country, d, h, fromIdx, toIdx);
       if (id !== requestId) return;
       status.textContent = '';
       console.info(`[seamless-fire] ${country.code}: first chart ${(performance.now() - t0).toFixed(0)} ms after select`);
     } catch (err) {
       if (id !== requestId) return;
       console.error(err);
-      status.textContent = `Could not load ${country.name}. Check the connection and try again.`;
+      status.textContent = err instanceof AreaError
+        ? err.message
+        : `Could not load ${country.name}. Check the connection and try again.`;
     }
   }
 
-  function codeFromHash() {
-    return location.hash.replace('#', '').toUpperCase();
+  function applyHash() {
+    const p = parseHash(location.hash);
+    state = { code: p.code || 'PL', area: p.area, from: p.from, to: p.to };
+    if (state.area.kind === 'preset') {
+      const pr = PRESETS.find((x) => x.id === (state.area as { id: string }).id);
+      if (pr && p.code && pr.country !== state.code) state.area = { kind: 'country' };
+    }
+    if (state.area.kind !== 'country') lastCustom = state.area;
+    show().then(() => {
+      if (p.error) status.textContent = `Part of the link was ignored: ${p.error}`;
+    });
   }
 
   async function init() {
@@ -290,12 +755,56 @@ import Base from '../layouts/Base.astro';
       .map((c) => `<option value="${c.code}">${escapeHtml(c.name)}</option>`)
       .join('');
     select.disabled = false;
+
     select.addEventListener('change', () => {
-      history.replaceState(null, '', `#${select.value}`);
-      show(select.value);
+      const code = select.value;
+      const country = countries.find((c) => c.code === code)!;
+      // Keep a drawn area only when it overlaps the new country; presets belong to one country.
+      let area = state.area;
+      if (area.kind === 'preset' && PRESETS.find((p) => p.id === (area as { id: string }).id)?.country !== code) area = { kind: 'country' };
+      const shape = area.kind === 'shape' ? area.shape : null;
+      if (shape && !bboxOverlap(shapeBBox(shape), country.bbox)) area = { kind: 'country' };
+      lastCustom = area.kind === 'country' ? null : area;
+      setState({ code, area });
     });
-    window.addEventListener('hashchange', () => show(codeFromHash()));
-    show(codeFromHash() || 'PL');
+    modeRadios.forEach((r) => r.addEventListener('change', () => {
+      if (r.value === 'country') setState({ area: { kind: 'country' } });
+      else if (lastCustom) setState({ area: lastCustom });
+      else {
+        // No custom area yet: start from the first preset of the country, or show the inputs.
+        const p = PRESETS.find((x) => x.country === state.code);
+        if (p) setState({ area: { kind: 'preset', id: p.id } });
+        else { customEl.hidden = false; areaNote.textContent = 'Enter a rectangle and press Apply.'; }
+      }
+    }));
+    presetSel.addEventListener('change', () => {
+      if (presetSel.value) setState({ area: { kind: 'preset', id: presetSel.value } });
+    });
+    rectForm.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const f = rectForm.elements as unknown as Record<'w' | 's' | 'e' | 'n', HTMLInputElement>;
+      const v = [f.w, f.s, f.e, f.n].map((x) => (x.value.trim() === '' ? NaN : Number(x.value.replace(',', '.'))));
+      try {
+        setState({ area: { kind: 'shape', shape: { kind: 'rect', bbox: normalizeRect(v) } } });
+      } catch (err) {
+        areaNote.innerHTML = `<span class="warn">${escapeHtml(err instanceof Error ? err.message : String(err))}</span>`;
+      }
+    });
+    for (const s of [fromM, fromY, toM, toY]) s.addEventListener('change', () => setState(readPeriod()));
+    $('full-period').addEventListener('click', () => setState({ from: undefined, to: undefined }));
+    dlMonthly.addEventListener('click', () => {
+      if (!current) return;
+      const { d, country, h, fromIdx, toIdx } = current;
+      const first = monthAbs(h.firstMonth);
+      download(
+        `seamless-fire_${country.code}_${areaSlug(state.area)}_${monthStr(first + fromIdx)}_${monthStr(first + toIdx)}_monthly.csv`,
+        monthlyCsv(h, d.model, fromIdx, toIdx),
+      );
+    });
+    dlHotspots.addEventListener('click', startHotspotExport);
+    dlCancel.addEventListener('click', () => exportJob?.abort());
+    window.addEventListener('hashchange', applyHash);
+    applyHash();
   }
 
   init();

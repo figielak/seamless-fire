@@ -7,7 +7,7 @@ Updated: 2026-11-14
 
 ## Where we are
 
-- Stage: **4 done** (2026 data to 2026-10, preliminary 2026-08…10, `viirs_det`, hotspot CSVs for PL/PT/ES/GR/UA/CL), next: **5**
+- Stage: **5 in progress**: 5a (area validation), 5b (TS logic), 5c steps 1–4 (area/presets/period, CSV export, top 10 anomalies, annual chart) done and pushed; left: **Leaflet polygon** (5c step 5)
 - Site: `src/pages/index.astro` (country select via `#CC` hash, Plotly calendar, "Now" panel); logic in
   `src/lib/harmonize.ts` (port of `harmonized_monthly`, `monthlyTotals(cells, n, keep)` ready for areas)
   and `src/lib/stats.ts`; tests `npm run test:site` (34, vs Python fixtures from `pipeline/site_fixture.py`)
@@ -19,13 +19,11 @@ Updated: 2026-11-14
 
 ## Next step
 
-1. Stage 5: rectangle inputs, Leaflet polygon, date range, CSV export (monthly + hotspots via
-   `model.hotspots`/`hotspot_sensors`; AU/CA → FIRMS link), anomalies top 10, annual chart (`annual.partial_year`).
-   Ask the user first about the empty-area intercept (see Blockers).
+1. Stage 5c step 5: Leaflet 1.9.4 map, own click-to-draw polygon (plan: ~/.claude/plans/zaplanuj-etap-5-tranquil-island.md). Then stage 6.
 
 ## Blockers / open questions
 
-- Stage 5 method question: model intercept gives ~4–20 cell-days/month for empty small areas before 2012 (see DECISIONS)
+- Small areas: anomaly ranking dominated by months with median 0 (k ≥ 0.5), e.g. Biebrza Apr 2020 not in top 10 (ask user if k should change)
 
 - PT backtest systematic underestimate (−26%, every year): not smearing; likely drift between 2012–18 and 2019–25. Mention as limitation
 
