@@ -171,7 +171,7 @@ Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 6. Site: raw/harmonized toggle, season profile, briefing, Method page.
 7. README (English, license, data sources, LLM disclosure).
 
-If time runs out, drop in this order: EFFIS check (3b) → Leaflet polygon (keep rectangle inputs) → season profile → briefing →
+If time runs out, drop in this order: Leaflet polygon (keep rectangle inputs) → season profile → briefing →
 2026 data → countries other than PL and PT.
 
 Work one stage at a time and report results before moving on.
