@@ -10,13 +10,13 @@ Updated: 2026-11-14
 - Stage: **1 (pipeline: load, filter, cell-days)**, not started
 - Scaffold exists: Astro (`src/pages/index.astro`, `method.astro`, `lib/data.ts`), `pipeline/build_data.py` (only lists files), `config.py`, deploy workflow
 - `public/data/` is empty
-- Git: no commits yet, remote `origin` set, nothing pushed, GitHub Pages not verified
+- Git: scaffold + `.planning` pushed to `origin/main`; deploy run / live site not verified yet
 - Raw data present for PL, PT, ES, GR, UA (52 CSV each)
 
 ## Next step
 
 1. Stage 1 in `pipeline/build_data.py`, check sanity numbers for PL, PT (see CLAUDE.md)
-2. First commit + push, confirm the deploy workflow works
+2. Confirm the deploy workflow run is green and https://figielak.github.io/seamless-fire/ loads
 
 ## Blockers / open questions
 
