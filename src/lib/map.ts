@@ -1,10 +1,11 @@
-// Area map (browser only, loaded lazily): shows the selected area and lets the user draw a
-// polygon by clicking. No drawing plugin: click = vertex, double-click or "Finish" = close.
-// Leaflet uses [lat, lon]; the rest of the site uses [lon, lat] (see geo.ts).
+// Main map (browser only, loaded lazily): satellite base map, fire cell layer, the selected
+// area, and polygon drawing by clicking. No drawing plugin: click = vertex, double-click or
+// "Finish" = close. Leaflet uses [lat, lon]; the rest of the site uses [lon, lat] (see geo.ts).
 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { normalizeRing, shapeBBox, type BBox, type LonLat, type Shape } from './geo.ts';
+import { cellLookup, type CellLayer } from './cellmap.ts';
 
 // Map view per country when the data bbox is a poor view (PT includes Azores and Madeira).
 const VIEW: Record<string, BBox> = { PT: [-9.6, 36.9, -6.1, 42.2] };
@@ -18,6 +19,90 @@ const bounds = (b: BBox) => L.latLngBounds([b[1], b[0]], [b[3], b[2]]);
 export interface AreaMapOptions {
   onPolygon: (ring: LonLat[]) => void; // a finished, valid polygon
   onDrawState: (drawing: boolean, points: number) => void;
+  // Space covered by floating panels (pixels), so fitted views stay visible.
+  padding: () => { topLeft: [number, number]; bottomRight: [number, number] };
+}
+
+// Fire colour ramp: upper part of matplotlib "inferno" (visible on dark imagery and on OSM).
+const INFERNO: [number, number, number][] = [
+  [147, 38, 103], [188, 55, 84], [221, 81, 58], [243, 120, 25], [252, 165, 10], [246, 215, 70], [252, 255, 164],
+];
+
+export function fireColor(t: number): string {
+  const x = Math.min(Math.max(t, 0), 1) * (INFERNO.length - 1);
+  const i = Math.min(Math.floor(x), INFERNO.length - 2);
+  const f = x - i;
+  const c = INFERNO[i].map((v, k) => Math.round(v + (INFERNO[i + 1][k] - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/** Log colour position of a value: log1p(v) / log1p(max). */
+export const fireT = (v: number, max: number) => (max > 0 ? Math.log1p(v) / Math.log1p(max) : 0);
+
+/** Canvas layer with one rectangle per 0.1° cell, redrawn after each move or zoom. */
+class CellCanvas extends L.Layer {
+  private canvas = L.DomUtil.create('canvas', 'cell-canvas') as HTMLCanvasElement;
+  private data: CellLayer | null = null;
+  private colors: string[] = [];
+
+  setData(data: CellLayer | null) {
+    this.data = data;
+    this.colors = [];
+    if (data) for (let j = 0; j < data.value.length; j++) this.colors.push(fireColor(fireT(data.value[j], data.max)));
+    if (this._map) this.redraw();
+  }
+
+  onAdd(map: L.Map) {
+    this.canvas.style.position = 'absolute';
+    this.canvas.style.pointerEvents = 'none';
+    this.canvas.style.opacity = '0.85';
+    map.getPanes().overlayPane.appendChild(this.canvas);
+    map.on('moveend zoomend resize viewreset', this.redraw, this);
+    map.on('zoomstart', this.hide, this);
+    this.redraw();
+    return this;
+  }
+
+  onRemove(map: L.Map) {
+    this.canvas.remove();
+    map.off('moveend zoomend resize viewreset', this.redraw, this);
+    map.off('zoomstart', this.hide, this);
+    return this;
+  }
+
+  private hide() {
+    this.canvas.style.visibility = 'hidden';
+  }
+
+  private redraw() {
+    const map = this._map;
+    if (!map) return;
+    const size = map.getSize();
+    const dpr = window.devicePixelRatio || 1;
+    L.DomUtil.setPosition(this.canvas, map.containerPointToLayerPoint([0, 0]));
+    this.canvas.width = size.x * dpr;
+    this.canvas.height = size.y * dpr;
+    this.canvas.style.width = `${size.x}px`;
+    this.canvas.style.height = `${size.y}px`;
+    this.canvas.style.visibility = '';
+    const ctx = this.canvas.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+    const d = this.data;
+    if (!d) return;
+    const b = map.getBounds();
+    const deg = d.cellDeg;
+    const [s, n, w, e] = [b.getSouth() - deg, b.getNorth(), b.getWest() - deg, b.getEast()];
+    for (let j = 0; j < d.value.length; j++) {
+      const lat0 = d.lat[j] * deg;
+      const lon0 = d.lon[j] * deg;
+      if (lat0 < s || lat0 > n || lon0 < w || lon0 > e) continue;
+      const p1 = map.latLngToContainerPoint([lat0 + deg, lon0]);
+      const p2 = map.latLngToContainerPoint([lat0, lon0 + deg]);
+      ctx.fillStyle = this.colors[j];
+      ctx.fillRect(p1.x, p1.y, Math.max(p2.x - p1.x, 1.5), Math.max(p2.y - p1.y, 1.5));
+    }
+  }
 }
 
 export class AreaMap {
@@ -28,16 +113,77 @@ export class AreaMap {
   private draftLayer: L.Layer | null = null;
   private drawing = false;
   private lastView = '';
+  private cells = new CellCanvas();
+  private legend: HTMLElement;
+  private lookup: ((lat: number, lon: number) => number) | null = null;
+  private layerInfo = { title: '', unit: '', max: 0 };
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
-    this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(this.map);
+    this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
+    L.control.zoom({ position: 'topright' }).addTo(this.map);
+    const eox = 'Sentinel-2 cloudless 2020 by <a href="https://s2maps.eu">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2020)';
+    const osmAttr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    const satellite = L.layerGroup([
+      L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg', {
+        maxZoom: 15, attribution: eox,
+      }),
+      L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/g/{z}/{y}/{x}.png', {
+        maxZoom: 15, attribution: `Labels ${osmAttr}`,
+      }),
+    ]);
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: osmAttr });
+    satellite.addTo(this.map);
+    this.cells.addTo(this.map);
+    L.control.layers({ Satellite: satellite, 'Street map': osm }, { 'Fire cells': this.cells }, { position: 'topright' })
+      .addTo(this.map);
+
+    const Legend = L.Control.extend({
+      onAdd: () => {
+        const div = L.DomUtil.create('div', 'map-legend');
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      },
+    });
+    const legendCtl = new Legend({ position: 'bottomleft' });
+    legendCtl.addTo(this.map);
+    this.legend = legendCtl.getContainer()!;
+    this.map.on('mousemove', (e: L.LeafletMouseEvent) => this.hover(e.latlng));
+    this.map.on('mouseout', () => this.hover(null));
+
     this.map.on('click', (e: L.LeafletMouseEvent) => this.addPoint(e.latlng));
     this.map.on('dblclick', () => this.finish());
     this.map.setView([50, 15], 4);
+  }
+
+  /** Fire cell layer; title says what it shows (month or period, observed or estimated). */
+  setCells(layer: CellLayer | null, title: string) {
+    this.cells.setData(layer);
+    this.lookup = layer ? cellLookup(layer) : null;
+    this.layerInfo = { title, unit: layer && layer.months > 1 ? 'cell-days in the period' : 'cell-days', max: layer?.max ?? 0 };
+    this.hover(null);
+  }
+
+  private hover(ll: L.LatLng | null) {
+    const { title, unit, max } = this.layerInfo;
+    const ticks = [1, 3, 10, 30, 100, 300, 1000, 3000, 10000].filter((t) => t < max);
+    const ramp = Array.from({ length: 11 }, (_, i) => fireColor(i / 10)).join(',');
+    let cell = 'Hover a cell for its value';
+    if (ll && this.lookup) {
+      const v = this.lookup(ll.lat, ll.lng);
+      const lat0 = Math.floor(ll.lat * 10 + 1e-9) / 10;
+      const lon0 = Math.floor(ll.lng * 10 + 1e-9) / 10;
+      cell = `Cell ${lat0.toFixed(1)}…${(lat0 + 0.1).toFixed(1)}°, ${lon0.toFixed(1)}…${(lon0 + 0.1).toFixed(1)}°: ` +
+        `<b>${v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
+    }
+    this.legend.innerHTML = max > 0
+      ? `<div class="lg-title">${title}</div>
+        <div class="lg-bar" style="background:linear-gradient(90deg,${ramp})"></div>
+        <div class="lg-ticks"><span>0</span>${ticks.filter((_, i) => i % 2 === 0).map((t) =>
+          `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t >= 1000 ? `${t / 1000}k` : t}</span>`).join('')}
+          <span style="left:100%">${max >= 1000 ? `${(max / 1000).toFixed(1)}k` : Math.round(max)}</span></div>
+        <div class="lg-unit">${unit}, log scale</div>
+        <div class="lg-cell">${cell}</div>`
+      : `<div class="lg-title">${title || 'No fire cells'}</div><div class="lg-unit">No fire cells in this selection</div>`;
   }
 
   /** Show the country frame and the area; fit the view when the selection changed. */
@@ -58,7 +204,8 @@ export class AreaMap {
     if (key !== this.lastView && !this.drawing) {
       this.lastView = key;
       const b = shape ? bounds(shapeBBox(shape)) : bounds(VIEW[code] ?? countryBBox);
-      this.map.fitBounds(b, { padding: [16, 16], maxZoom: 11 });
+      const pad = this.opts.padding();
+      this.map.fitBounds(b, { paddingTopLeft: pad.topLeft, paddingBottomRight: pad.bottomRight, maxZoom: 11 });
     }
   }
 

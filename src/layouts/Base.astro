@@ -1,8 +1,9 @@
 ---
 interface Props {
   title?: string;
+  app?: boolean; // full-screen map page: no footer, no page width limit
 }
-const { title = 'Seamless Fire' } = Astro.props;
+const { title = 'Seamless Fire', app = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 
@@ -15,7 +16,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <title>{title}</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2300224e'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%23fee838'/%3E%3Crect x='9' y='9' width='4' height='4' fill='%23e8432e'/%3E%3C/svg%3E" />
   </head>
-  <body>
+  <body class:list={{ 'is-app': app }}>
     <header class="site">
       <a class="brand" href={base}>Seamless Fire</a>
       <nav>
@@ -26,12 +27,14 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <main>
       <slot />
     </main>
-    <footer>
-      <p>
-        Data: NASA FIRMS active fire products (MODIS Collection 6, VIIRS 375 m from S-NPP and NOAA-20).
-        Code: Apache 2.0.
-      </p>
-    </footer>
+    {!app && (
+      <footer>
+        <p>
+          Data: NASA FIRMS active fire products (MODIS Collection 6.1, VIIRS 375 m from S-NPP and NOAA-20).
+          Code: Apache 2.0.
+        </p>
+      </footer>
+    )}
   </body>
 </html>
 
@@ -45,6 +48,23 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     --accent: #e8432e;
     --hi: #b3261e;
     --lo: #1f5fa8;
+    --head: #00224e; /* cividis dark end */
+    --header-h: 46px;
+    --left-w: 320px;
+    --dock-h: 42vh;
+  }
+  body.is-app main {
+    max-width: none;
+    padding: 0;
+  }
+  body.is-app.dock-tall {
+    --dock-h: 72vh;
+  }
+  body.is-app header.site {
+    height: var(--header-h);
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
   }
   * {
     box-sizing: border-box;

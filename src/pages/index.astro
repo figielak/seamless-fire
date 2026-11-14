@@ -2,153 +2,286 @@
 import Base from '../layouts/Base.astro';
 ---
 
-<Base title="Seamless Fire">
-  <h1>Seamless Fire</h1>
-  <p class="lead">
-    Burning activity calendar from 2000 to today. MODIS (2000–) and VIIRS (2012–) hotspots are
-    put on one scale, so years before and after 2012 can be compared.
-  </p>
+<Base title="Seamless Fire" app>
+  <div class="app">
+    <div id="map" class="map" aria-label="Map of fire cells and the selected area"></div>
 
-  <section class="card setup" aria-label="Area and period">
-    <div class="row">
-      <label for="country">Country</label>
-      <select id="country" disabled><option>Loading…</option></select>
-      <span id="status" class="status" role="status"></span>
-    </div>
-
-    <fieldset class="row">
-      <legend>Area</legend>
-      <label class="radio"><input type="radio" name="mode" value="country" checked /> Whole country</label>
-      <label class="radio"><input type="radio" name="mode" value="custom" /> Custom area</label>
-    </fieldset>
-
-    <div id="custom" class="custom" hidden>
-      <div class="row">
-        <label for="preset">Example</label>
-        <select id="preset"></select>
+    <aside class="panel left" id="panel-left" aria-label="Controls">
+      <div class="panel-head">
+        <h1>Seamless Fire</h1>
+        <button type="button" id="toggle-left" class="icon" aria-expanded="true" title="Hide controls">‹</button>
       </div>
-      <form id="rect" class="row rect" autocomplete="off">
-        <span class="lbl">Rectangle (degrees)</span>
-        <label>W <input name="w" inputmode="decimal" size="7" /></label>
-        <label>S <input name="s" inputmode="decimal" size="7" /></label>
-        <label>E <input name="e" inputmode="decimal" size="7" /></label>
-        <label>N <input name="n" inputmode="decimal" size="7" /></label>
-        <button type="submit">Apply</button>
-      </form>
-      <p id="area-note" class="note"></p>
-    </div>
+      <div class="panel-body">
+        <p class="lead">
+          Burning activity 2000 → today on one scale: MODIS (2000–) and VIIRS (2012–) hotspots
+          harmonized, so years before and after 2012 can be compared.
+        </p>
 
-    <div class="map-wrap">
-      <div class="row map-tools">
-        <button type="button" id="draw">Draw polygon</button>
-        <button type="button" id="draw-finish" hidden>Finish</button>
-        <button type="button" id="draw-undo" hidden>Undo point</button>
-        <button type="button" id="draw-cancel" hidden>Cancel</button>
-        <span id="draw-hint" class="note"></span>
+        <details open class="sec">
+          <summary>Country and area</summary>
+          <div class="row">
+            <select id="country" disabled aria-label="Country"><option>Loading…</option></select>
+          </div>
+          <span id="status" class="status" role="status"></span>
+          <fieldset class="row">
+            <legend class="sr-only">Area</legend>
+            <label class="radio"><input type="radio" name="mode" value="country" checked /> Whole country</label>
+            <label class="radio"><input type="radio" name="mode" value="custom" /> Custom area</label>
+          </fieldset>
+          <div id="custom" class="custom" hidden>
+            <div class="row">
+              <label for="preset">Example</label>
+              <select id="preset"></select>
+            </div>
+            <form id="rect" class="rect" autocomplete="off">
+              <span class="lbl">Rectangle (degrees)</span>
+              <div class="rect-grid">
+                <label>W <input name="w" inputmode="decimal" /></label>
+                <label>S <input name="s" inputmode="decimal" /></label>
+                <label>E <input name="e" inputmode="decimal" /></label>
+                <label>N <input name="n" inputmode="decimal" /></label>
+              </div>
+              <button type="submit">Apply rectangle</button>
+            </form>
+            <p id="area-note" class="note"></p>
+          </div>
+          <div class="row map-tools">
+            <button type="button" id="draw">Draw polygon on map</button>
+            <button type="button" id="draw-finish" hidden>Finish</button>
+            <button type="button" id="draw-undo" hidden>Undo point</button>
+            <button type="button" id="draw-cancel" hidden>Cancel</button>
+          </div>
+          <p id="draw-hint" class="note"></p>
+        </details>
+
+        <details open class="sec">
+          <summary>Period</summary>
+          <div class="row period">
+            <label>From <select id="from-m" class="small"></select><select id="from-y" class="small"></select></label>
+            <label>To <select id="to-m" class="small"></select><select id="to-y" class="small"></select></label>
+          </div>
+          <button type="button" id="full-period">Full period</button>
+        </details>
+
+        <details open class="sec">
+          <summary>Values</summary>
+          <div class="view-toggle" role="group" aria-label="Calendar values">
+            <button type="button" data-view="harmonized" aria-pressed="true">Harmonized</button>
+            <button type="button" data-view="raw" aria-pressed="false">Raw (MODIS, then VIIRS)</button>
+          </div>
+          <p id="view-note" class="note"></p>
+        </details>
+
+        <details open class="sec">
+          <summary>Map layer</summary>
+          <div class="row">
+            <label class="radio"><input type="radio" name="mapmode" value="month" checked /> One month</label>
+            <label class="radio"><input type="radio" name="mapmode" value="period" /> Whole period</label>
+          </div>
+          <div class="row month-step">
+            <button type="button" id="map-prev" class="icon" title="Previous month">‹</button>
+            <span id="map-month" class="map-month"></span>
+            <button type="button" id="map-next" class="icon" title="Next month">›</button>
+          </div>
+          <p class="note">Click a month in the calendar to show it on the map. Each cell gets its share of
+            the harmonized value, so the cells of an area add up to its calendar value.</p>
+        </details>
+
+        <details class="sec">
+          <summary>Download</summary>
+          <div class="row">
+            <button type="button" id="dl-monthly">Monthly series (CSV)</button>
+            <button type="button" id="dl-hotspots">Hotspots (CSV)</button>
+            <button type="button" id="dl-cancel" hidden>Cancel</button>
+          </div>
+          <span id="dl-status" class="status" role="status"></span>
+          <p class="note" id="dl-note"></p>
+        </details>
       </div>
-      <div id="map" class="map" aria-label="Map of the selected area"></div>
-    </div>
+    </aside>
 
-    <div class="row period">
-      <span class="lbl">Period</span>
-      <label>From <select id="from-m" class="small"></select><select id="from-y" class="small"></select></label>
-      <label>To <select id="to-m" class="small"></select><select id="to-y" class="small"></select></label>
-      <button type="button" id="full-period">Full period</button>
-    </div>
-  </section>
+    <section id="now" class="panel now" aria-live="polite" hidden></section>
 
-  <section id="now" class="card now" aria-live="polite" hidden></section>
-
-  <section class="card">
-    <h2>Calendar <span class="unit">fire cell-days per month, VIIRS S-NPP scale</span></h2>
-    <div id="calendar" class="calendar"></div>
-    <p class="note" id="calendar-note"></p>
-  </section>
-
-  <section class="card">
-    <h2>Per year <span class="unit">sum of monthly cell-days, ~80% interval for estimated years</span></h2>
-    <div id="annual" class="annual"></div>
-    <p class="note" id="annual-note"></p>
-  </section>
-
-  <section class="card">
-    <h2>Top 10 anomalies <span class="unit">months most above their usual level, in the selected period</span></h2>
-    <div id="anomalies"></div>
-    <p class="note">
-      × typical = (value + k) / (median + k), median of the same calendar month in the 10 years
-      before. k is a small offset that scales with the area, so tiny counts do not explode.
-    </p>
-  </section>
-
-  <section class="card">
-    <h2>Download</h2>
-    <div class="row">
-      <button type="button" id="dl-monthly">Monthly series (CSV)</button>
-      <button type="button" id="dl-hotspots">Hotspots (CSV)</button>
-      <button type="button" id="dl-cancel" hidden>Cancel</button>
-      <span id="dl-status" class="status" role="status"></span>
-    </div>
-    <p class="note" id="dl-note"></p>
-  </section>
-
-  <section class="card about">
-    <h2>How to read it</h2>
-    <ul>
-      <li>
-        <b>Cell-day</b>: a 0.1° grid cell (about 11 km) with at least one vegetation fire detection on
-        a given day. Industrial heat sources (FIRMS <code>type</code> 2) are removed.
-      </li>
-      <li>
-        <b>From February 2012</b> the values are observed VIIRS S-NPP cell-days. <b>Before</b>, they are
-        estimated from MODIS with a per-country model calibrated on 2012–2025
-        (hover shows the ~80% interval).
-      </li>
-      <li>
-        <b>Custom area</b>: a cell counts when its center is inside the area. Before 2012 the area gets
-        its share of the country estimate (area MODIS / country MODIS). Small areas are much less
-        certain than whole countries.
-      </li>
-      <li>
-        Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
-        (Aug–Sep 2020), S-NPP outage (Jul–Aug 2022).
-      </li>
-    </ul>
-  </section>
+    <section class="dock" id="dock" aria-label="Charts">
+      <div class="dock-tabs" role="tablist">
+        <button type="button" role="tab" data-tab="calendar" aria-selected="true">Calendar</button>
+        <button type="button" role="tab" data-tab="annual" aria-selected="false">Per year</button>
+        <button type="button" role="tab" data-tab="anomalies" aria-selected="false">Top anomalies</button>
+        <button type="button" role="tab" data-tab="about" aria-selected="false">How to read it</button>
+        <span class="spacer"></span>
+        <button type="button" id="dock-size" class="icon" title="Taller panel">▴</button>
+        <button type="button" id="dock-toggle" class="icon" title="Hide panel">▾</button>
+      </div>
+      <div class="dock-body">
+        <div class="tab" data-tab="calendar">
+          <p class="unit"><span id="calendar-unit">fire cell-days per month, VIIRS S-NPP scale</span>. Click a month to map it.</p>
+          <div id="calendar" class="calendar"></div>
+          <p class="note" id="calendar-note"></p>
+        </div>
+        <div class="tab" data-tab="annual" hidden>
+          <p class="unit"><span id="annual-unit">sum of monthly cell-days, ~80% interval for estimated years</span>.</p>
+          <div id="annual" class="annual"></div>
+          <p class="note" id="annual-note"></p>
+        </div>
+        <div class="tab" data-tab="anomalies" hidden>
+          <p class="unit">Months most above their usual level, in the selected period. Click a row to map it.</p>
+          <div id="anomalies"></div>
+          <p class="note">
+            × typical = (value + k) / (median + k), median of the same calendar month in the 10 years
+            before. k is a small offset that scales with the area, so tiny counts do not explode.
+          </p>
+        </div>
+        <div class="tab about" data-tab="about" hidden>
+          <ul>
+            <li>
+              <b>Cell-day</b>: a 0.1° grid cell (about 11 km) with at least one vegetation fire detection on
+              a given day. Industrial heat sources (FIRMS <code>type</code> 2) are removed.
+            </li>
+            <li>
+              <b>From February 2012</b> the values are observed VIIRS S-NPP cell-days. <b>Before</b>, they are
+              estimated from MODIS with a per-country model calibrated on 2012–2025
+              (hover shows the ~80% interval).
+            </li>
+            <li>
+              <b>Custom area</b>: a cell counts when its center is inside the area. Before 2012 the area gets
+              its share of the country estimate (area MODIS / country MODIS). Small areas are much less
+              certain than whole countries.
+            </li>
+            <li>
+              <b>Map</b>: each cell shows its share of the harmonized value, by the same rule. Estimated
+              months spread the country value over cells by their MODIS cell-days.
+            </li>
+            <li>
+              Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
+              (Aug–Sep 2020), S-NPP outage (Jul–Aug 2022). Aug–Oct 2026 are preliminary (near real-time).
+            </li>
+            <li>
+              Data: NASA FIRMS active fire products (MODIS Collection 6.1, VIIRS 375 m from S-NPP and
+              NOAA-20). Base map: Sentinel-2 cloudless (EOX), OpenStreetMap. Code: Apache 2.0.
+              <a href="method/">Method and validation</a>.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
 </Base>
 
 <style>
-  .setup .row {
+  .app {
+    position: fixed;
+    inset: var(--header-h) 0 0 0;
+    overflow: hidden;
+  }
+  .map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: #0b1a2b;
+  }
+  .panel,
+  .dock {
+    position: absolute;
+    z-index: 1100;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  }
+  .left {
+    top: 10px;
+    left: 10px;
+    bottom: 10px;
+    width: var(--left-w);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100% - 20px);
+    height: max-content;
+  }
+  .left.collapsed {
+    bottom: auto;
+    width: auto;
+  }
+  .left.collapsed .panel-body {
+    display: none;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+    background: var(--head);
+    color: #fff;
+    border-radius: 8px 8px 0 0;
+  }
+  .left.collapsed .panel-head {
+    border-radius: 8px;
+  }
+  .panel-head h1 {
+    font-size: 1.1rem;
+    margin: 0;
+  }
+  .panel-body {
+    overflow-y: auto;
+    padding: 0.3rem 0.9rem 0.8rem;
+  }
+  .lead {
+    font-size: 0.88rem;
+    margin: 0.4rem 0 0.2rem;
+  }
+  .sec {
+    border-top: 1px solid var(--line);
+    padding: 0.5rem 0 0.3rem;
+  }
+  .sec summary {
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 0.4rem;
+    color: var(--head);
+  }
+  .row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 0.8rem;
+    gap: 0.4rem 0.7rem;
     align-items: center;
-    margin: 0 0 0.7rem;
+    margin: 0 0 0.5rem;
   }
-  .setup fieldset {
+  fieldset.row {
     border: 0;
     padding: 0;
   }
-  .setup legend {
-    float: left;
-    font-weight: 600;
-    margin-right: 0.4rem;
+  .row select:not(.small) {
+    width: 100%;
   }
-  .setup .lbl,
-  .setup label[for] {
+  label[for],
+  .lbl {
     font-weight: 600;
   }
-  .setup .radio {
+  .radio {
     font-weight: 400;
   }
   .custom {
     border-left: 3px solid var(--line);
-    padding-left: 0.8rem;
-    margin-bottom: 0.7rem;
+    padding-left: 0.6rem;
+    margin-bottom: 0.6rem;
   }
-  .rect input {
+  .rect-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem 0.6rem;
+    margin: 0.3rem 0 0.4rem;
+  }
+  .rect-grid label {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+  }
+  .rect-grid input {
     font: inherit;
-    width: 5.5rem;
-    padding: 0.25rem 0.4rem;
+    width: 100%;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
     border: 1px solid var(--line);
     border-radius: 6px;
   }
@@ -157,19 +290,130 @@ import Base from '../layouts/Base.astro';
     gap: 0.3rem;
     align-items: center;
   }
-  .map {
-    height: 340px;
+  .view-toggle {
+    display: inline-flex;
     border: 1px solid var(--line);
     border-radius: 6px;
-    margin-bottom: 0.8rem;
-    z-index: 0;
+    overflow: hidden;
   }
-  .map-tools {
-    margin-bottom: 0.4rem !important;
+  .view-toggle button {
+    border: 0;
+    border-radius: 0;
+  }
+  .view-toggle button + button {
+    border-left: 1px solid var(--line);
+  }
+  .view-toggle button[aria-pressed='true'] {
+    background: var(--head);
+    color: #fff;
+  }
+  .month-step {
+    flex-wrap: nowrap;
+  }
+  .map-month {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  .now {
+    top: 10px;
+    right: 56px;
+    width: 300px;
+    max-height: calc(100% - var(--dock-h) - 30px);
+    overflow-y: auto;
+    padding: 0.7rem 0.9rem;
+  }
+  .dock {
+    left: calc(var(--left-w) + 20px);
+    right: 10px;
+    bottom: 10px;
+    height: var(--dock-h);
+    display: flex;
+    flex-direction: column;
+  }
+  .dock.collapsed {
+    height: auto;
+  }
+  .dock.collapsed .dock-body {
+    display: none;
+  }
+  .dock-tabs {
+    display: flex;
+    gap: 0.2rem;
+    align-items: center;
+    padding: 0.3rem 0.4rem 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+  .dock-tabs [role='tab'] {
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: none;
+    padding: 0.3rem 0.6rem;
+    white-space: nowrap;
+  }
+  .dock-tabs [role='tab'][aria-selected='true'] {
+    border-bottom-color: var(--accent);
+    font-weight: 700;
+  }
+  .dock-tabs .spacer {
+    flex: 1;
+  }
+  .dock-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.3rem 0.9rem 0.6rem;
+  }
+  .dock-body .unit {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0.2rem 0;
   }
   .annual {
     width: 100%;
-    min-height: 320px;
+    min-height: 300px;
+  }
+  .about ul {
+    margin: 0.4rem 0;
+    padding-left: 1.2rem;
+    max-width: 60rem;
+  }
+  .about li {
+    margin: 0.3rem 0;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  /* Phones and small tablets: map on top, panels below in normal flow. */
+  @media (max-width: 860px) {
+    .app {
+      position: static;
+      overflow: visible;
+    }
+    .map {
+      position: relative;
+      height: 60vh;
+    }
+    .panel,
+    .dock {
+      position: static;
+      width: auto;
+      height: auto;
+      max-height: none;
+      margin: 10px;
+    }
+    .dock-body {
+      overflow: visible;
+    }
+    #dock-size {
+      display: none;
+    }
   }
 </style>
 
@@ -215,6 +459,105 @@ import Base from '../layouts/Base.astro';
   .warn {
     color: var(--accent);
   }
+  button.icon {
+    padding: 0.1rem 0.55rem;
+    line-height: 1.3;
+  }
+  .panel-head button.icon {
+    background: transparent;
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  table.anom tbody tr {
+    cursor: pointer;
+  }
+  table.anom tbody tr:hover {
+    background: #f1f3f5;
+  }
+  /* "Now" card injected by renderNow(): one compact column in the floating panel. */
+  section.now h2 {
+    font-size: 1rem;
+    margin-bottom: 0.4rem;
+  }
+  section.now .now-grid {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  section.now .value {
+    font-size: 1.9rem;
+  }
+  section.now .ratio {
+    font-size: 1.15rem;
+  }
+  section.now dl {
+    font-size: 0.85rem;
+  }
+  section.now .note {
+    font-size: 0.8rem;
+  }
+  .map-legend {
+    background: rgba(255, 255, 255, 0.93);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem 0.45rem;
+    width: 250px;
+    font: 12px/1.35 system-ui, sans-serif;
+    color: #24292f;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  }
+  .map-legend .lg-title {
+    font-weight: 700;
+    font-size: 12.5px;
+  }
+  .map-legend .lg-bar {
+    height: 10px;
+    border-radius: 2px;
+    margin: 0.3rem 0 0;
+  }
+  .map-legend .lg-ticks {
+    position: relative;
+    height: 15px;
+    margin: 0 6px;
+  }
+  .map-legend .lg-ticks span {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #57606a;
+  }
+  .map-legend .lg-unit {
+    color: #57606a;
+  }
+  .map-legend .lg-cell {
+    margin-top: 0.2rem;
+    border-top: 1px solid #d0d7de;
+    padding-top: 0.2rem;
+  }
+  .leaflet-container {
+    font: 12px/1.4 system-ui, sans-serif;
+  }
+  .leaflet-bottom.leaflet-left {
+    /* keep the legend clear of the dock */
+    left: calc(var(--left-w) + 20px);
+    bottom: calc(var(--dock-h) + 14px);
+  }
+  body.dock-closed .leaflet-bottom.leaflet-left {
+    bottom: 60px;
+  }
+  .leaflet-bottom.leaflet-right {
+    bottom: calc(var(--dock-h) + 14px);
+  }
+  body.dock-closed .leaflet-bottom.leaflet-right {
+    bottom: 50px;
+  }
+  @media (max-width: 860px) {
+    .leaflet-bottom.leaflet-left,
+    .leaflet-bottom.leaflet-right,
+    body.dock-closed .leaflet-bottom.leaflet-left,
+    body.dock-closed .leaflet-bottom.leaflet-right {
+      left: 0;
+      bottom: 0;
+    }
+  }
 </style>
 
 <script>
@@ -228,6 +571,8 @@ import Base from '../layouts/Base.astro';
     monthCount,
     monthlyTotals,
     monthStr,
+    rawRatio,
+    rawSplice,
     type Harmonized,
   } from '../lib/harmonize';
   import {
@@ -245,6 +590,7 @@ import Base from '../layouts/Base.astro';
   } from '../lib/geo';
   import { monthStats, topAnomalies } from '../lib/stats';
   import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
+  import { cellLayer } from '../lib/cellmap';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const MONTHS_LONG = [
@@ -275,13 +621,20 @@ import Base from '../layouts/Base.astro';
   const dlCancel = $<HTMLButtonElement>('dl-cancel');
   const dlStatus = $('dl-status');
   const dlNote = $('dl-note');
+  const viewBtns = [...document.querySelectorAll<HTMLButtonElement>('.view-toggle button')];
+  const viewNote = $('view-note');
   const modeRadios = [...document.querySelectorAll<HTMLInputElement>('input[name=mode]')];
 
   let countries: Country[] = [];
   let requestId = 0;
   let state: ViewState = { code: 'PL', area: { kind: 'country' } };
   let lastCustom: AreaSpec | null = null; // restored when switching back to "Custom area"
-  let current: { country: Country; d: CountryData; h: Harmonized; fromIdx: number; toIdx: number } | null = null;
+  // h = series of the selected area (or the country); hc = country series (map layer shares).
+  let current: {
+    country: Country; d: CountryData; h: Harmonized; hc: Harmonized; fromIdx: number; toIdx: number;
+  } | null = null;
+  let mapMode: 'month' | 'period' = 'month';
+  let selAbs: number | null = null; // month shown on the map (absolute month number)
   let exportJob: AbortController | null = null;
   let areaMap: import('../lib/map').AreaMap | null = null;
   let plotlyPromise: Promise<typeof import('plotly.js-dist-min')['default']> | null = null;
@@ -391,7 +744,9 @@ import Base from '../layouts/Base.astro';
       z[r][c] = Math.log10(1 + v);
       const lines = [
         `<b>${MONTHS[c]} ${years[r]}</b>`,
-        `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
+        h.raw
+          ? `${a < monthAbs(d.model.viirs_first_month) ? 'Raw MODIS' : 'Raw VIIRS'}: <b>${fmt(v)}</b> cell-days`
+          : `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
       ];
       if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
       lines.push(
@@ -437,6 +792,10 @@ import Base from '../layouts/Base.astro';
         hoverinfo: 'skip',
         marker: { symbol: 'circle-open', size: 10, line: { width: 2, color: '#f28e2b' } },
       },
+      {
+        type: 'scatter', mode: 'markers', x: [], y: [], name: 'on the map', hoverinfo: 'skip',
+        marker: { symbol: 'square-open', size: 16, line: { width: 2.5, color: '#e8432e' } },
+      },
     ];
 
     // Step line between estimated and observed months (VIIRS starts in Feb 2012).
@@ -468,21 +827,36 @@ import Base from '../layouts/Base.astro';
       },
       shapes: showStep ? [{ type: 'path', path, line: { color: '#e8432e', width: 2.5 }, layer: 'above' }] : [],
       legend: { orientation: 'h', x: 0, y: -0.02, yanchor: 'top' },
-      showlegend: lowX.length + preX.length > 0,
+      showlegend: true,
     };
     await Plotly.react(calEl, data as Plotly.Data[], layout, {
       responsive: true, displaylogo: false,
       modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
       toImageButtonOptions: { filename: `seamless-fire-${country.code}-${areaSlug(state.area)}-calendar` },
     });
+    markCalendar();
+    const gd = calEl as unknown as {
+      on: (ev: string, f: (e: { points?: { x: number; y: number }[] }) => void) => void; _sfClick?: boolean;
+    };
+    if (!gd._sfClick) {
+      gd._sfClick = true;
+      gd.on('plotly_click', (e) => {
+        const pt = e.points?.[0];
+        if (pt) selectMonth(Number(pt.y) * 12 + Number(pt.x));
+      });
+    }
     const parts = [];
-    if (vf > first + fromIdx) {
+    if (h.raw) {
+      parts.push(showStep
+        ? 'Raw counts. Above the red line: MODIS, below: VIIRS S-NPP. The sensors count differently, so the series jumps at the switch.'
+        : 'Raw counts of one sensor only.');
+    } else if (vf > first + fromIdx) {
       parts.push(showStep
         ? `Above the red line (<b>${estLabel}</b>): estimated from MODIS. Below: observed VIIRS.`
         : 'All shown months are estimated from MODIS.');
     } else parts.push('All shown months are observed VIIRS.');
     parts.push('Color scale is logarithmic.');
-    if (h.area) parts.push('Before 2012 the area gets its share of the country estimate (area MODIS / country MODIS).');
+    if (h.area && !h.raw) parts.push('Before 2012 the area gets its share of the country estimate (area MODIS / country MODIS).');
     noteEl.innerHTML = parts.join(' ');
   }
 
@@ -492,9 +866,12 @@ import Base from '../layouts/Base.astro';
     const Plotly = await plotly();
     const t = annualTotals(h, d.model, fromIdx, toIdx);
     const hasInterval = t.map((x) => x.hi > x.lo);
-    const colors = t.map((x) => (x.estimated ? '#7f8fa6' : '#00224e'));
+    const vy = Math.floor(monthAbs(d.model.viirs_first_month) / 12);
+    // Raw: grey = MODIS years, blue = VIIRS years (2012 is VIIRS except January).
+    const colors = t.map((x) => ((h.raw ? x.year < vy : x.estimated) ? '#7f8fa6' : '#00224e'));
     const hover = t.map((x) => {
-      const lines = [`<b>${x.year}</b>`, `${x.estimated ? 'Estimated' : 'Observed'}: <b>${fmt(x.value)}</b> cell-days`];
+      const kind = h.raw ? (x.year < vy ? 'Raw MODIS' : 'Raw VIIRS') : x.estimated ? 'Estimated' : 'Observed';
+      const lines = [`<b>${x.year}</b>`, `${kind}: <b>${fmt(x.value)}</b> cell-days`];
       if (x.hi > x.lo) lines.push(`~80% interval: ${fmt(x.lo)} – ${fmt(x.hi)}`);
       if (x.partial) lines.push(`Partial year: ${x.months} month${x.months === 1 ? '' : 's'}`);
       return lines.join('<br>');
@@ -537,7 +914,9 @@ import Base from '../layouts/Base.astro';
     });
     const partial = t.filter((x) => x.partial).map((x) => x.year);
     annualNote.innerHTML =
-      'Grey: estimated from MODIS, dark blue: observed VIIRS (2012 mixes one estimated month). ' +
+      (h.raw
+        ? 'Raw counts. Grey: MODIS, dark blue: VIIRS S-NPP (2012 includes raw MODIS for January). '
+        : 'Grey: estimated from MODIS, dark blue: observed VIIRS (2012 mixes one estimated month). ') +
       (partial.length ? `Hatched: partial year (${partial.join(', ')}), not comparable with full years.` : '');
   }
 
@@ -556,7 +935,7 @@ import Base from '../layouts/Base.astro';
         a.lowQuality ? 'sensor problem' : '',
       ].filter(Boolean).join(', ');
       const r = a.ratio!;
-      return `<tr><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
+      return `<tr data-month="${a.month}" title="Show on the map"><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
         <td><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td><td>${fmt(a.median!)}</td>
         <td>${Math.round(a.percentile)}%</td><td>${flags}</td></tr>`;
     });
@@ -637,6 +1016,121 @@ import Base from '../layouts/Base.astro';
     }
   }
 
+  // ------------------------------------------------------------------ map layer
+
+  /** Fire cells for the selected month (or the whole period) and the calendar marker. */
+  function updateMapLayer() {
+    if (!current || selAbs === null) return;
+    const label = $('map-month');
+    const { d, hc, fromIdx, toIdx } = current;
+    const first = monthAbs(hc.firstMonth);
+    const i = selAbs - first;
+    let title: string;
+    if (mapMode === 'month') {
+      const kind = hc.estimated[i] ? 'estimated from MODIS' : hc.preliminary[i] ? 'VIIRS, preliminary' : 'observed VIIRS';
+      title = `${monthLabel(monthStr(selAbs))} · ${kind}`;
+      label.textContent = monthLabel(monthStr(selAbs));
+    } else {
+      title = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))} · total`;
+      label.textContent = 'Whole period';
+    }
+    $<HTMLButtonElement>('map-prev').disabled = mapMode !== 'month' || i <= fromIdx;
+    $<HTMLButtonElement>('map-next').disabled = mapMode !== 'month' || i >= toIdx;
+    markCalendar();
+    if (!areaMap) return;
+    const layer = mapMode === 'month' ? cellLayer(d.cells, hc, i, i) : cellLayer(d.cells, hc, fromIdx, toIdx);
+    areaMap.setCells(layer, title);
+  }
+
+  /** Red square on the calendar month shown on the map (trace 3). */
+  function markCalendar() {
+    const gd = calEl as unknown as { data?: unknown[] };
+    if (!gd.data || gd.data.length < 4 || selAbs === null || !plotlyPromise) return;
+    const on = mapMode === 'month';
+    const x = on ? [selAbs % 12] : [];
+    const y = on ? [Math.floor(selAbs / 12)] : [];
+    plotlyPromise.then((Plotly) => Plotly.restyle(calEl, { x: [x], y: [y] } as unknown as Plotly.Data, [3]));
+  }
+
+  function selectMonth(abs: number) {
+    if (!current) return;
+    const first = monthAbs(current.h.firstMonth);
+    selAbs = Math.min(Math.max(abs, first + current.fromIdx), first + current.toIdx);
+    mapMode = 'month';
+    document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => (r.checked = r.value === 'month'));
+    updateMapLayer();
+  }
+
+  // ------------------------------------------------------------------ panels
+
+  function mapPadding(): { topLeft: [number, number]; bottomRight: [number, number] } {
+    if (window.matchMedia('(max-width: 860px)').matches) return { topLeft: [12, 12], bottomRight: [12, 12] };
+    const left = $('panel-left').getBoundingClientRect();
+    const dock = $('dock').getBoundingClientRect();
+    const mapRect = $('map').getBoundingClientRect();
+    return {
+      topLeft: [Math.max(left.right - mapRect.left + 12, 12), 12],
+      bottomRight: [12, Math.max(mapRect.bottom - dock.top + 12, 12)],
+    };
+  }
+
+  function resizeCharts() {
+    if (!plotlyPromise) return;
+    plotlyPromise.then((Plotly) => {
+      for (const el of [calEl, annualEl]) {
+        if (el.offsetParent && (el as unknown as { data?: unknown }).data) Plotly.Plots.resize(el);
+      }
+    });
+    areaMap?.resize();
+  }
+
+  function initPanels() {
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('.dock-tabs [role=tab]')];
+    const bodies = [...document.querySelectorAll<HTMLElement>('.dock-body .tab')];
+    const dock = $('dock');
+    const open = () => {
+      dock.classList.remove('collapsed');
+      document.body.classList.remove('dock-closed');
+      $('dock-toggle').textContent = '▾';
+    };
+    tabs.forEach((t) => t.addEventListener('click', () => {
+      tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+      bodies.forEach((b) => (b.hidden = b.dataset.tab !== t.dataset.tab));
+      open();
+      resizeCharts();
+    }));
+    $('dock-toggle').addEventListener('click', () => {
+      const closed = dock.classList.toggle('collapsed');
+      document.body.classList.toggle('dock-closed', closed);
+      $('dock-toggle').textContent = closed ? '▴' : '▾';
+      $('dock-toggle').title = closed ? 'Show panel' : 'Hide panel';
+      resizeCharts();
+    });
+    $('dock-size').addEventListener('click', () => {
+      const tall = document.body.classList.toggle('dock-tall');
+      $('dock-size').textContent = tall ? '▾' : '▴';
+      $('dock-size').title = tall ? 'Lower panel' : 'Taller panel';
+      open();
+      resizeCharts();
+    });
+    const left = $('panel-left');
+    $('toggle-left').addEventListener('click', () => {
+      const closed = left.classList.toggle('collapsed');
+      $('toggle-left').textContent = closed ? '›' : '‹';
+      $('toggle-left').setAttribute('aria-expanded', String(!closed));
+    });
+    document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => r.addEventListener('change', () => {
+      mapMode = r.value as 'month' | 'period';
+      updateMapLayer();
+    }));
+    $('map-prev').addEventListener('click', () => selAbs !== null && selectMonth(selAbs - 1));
+    $('map-next').addEventListener('click', () => selAbs !== null && selectMonth(selAbs + 1));
+    anomEl.addEventListener('click', (ev) => {
+      const tr = (ev.target as HTMLElement).closest<HTMLElement>('tr[data-month]');
+      if (tr) selectMonth(monthAbs(tr.dataset.month!));
+    });
+  }
+
   // ------------------------------------------------------------------ controls
 
   function fillPeriodSelects(firstAbs: number, lastAbs: number) {
@@ -704,6 +1198,22 @@ import Base from '../layouts/Base.astro';
     return { from, to };
   }
 
+  function syncView(h: Harmonized, d: CountryData) {
+    const raw = state.view === 'raw';
+    viewBtns.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.view === 'raw') === raw)));
+    $('calendar-unit').textContent = raw
+      ? 'raw fire cell-days per month, each sensor on its own scale'
+      : 'fire cell-days per month, VIIRS S-NPP scale';
+    $('annual-unit').textContent = raw
+      ? 'sum of raw monthly cell-days, no harmonization'
+      : 'sum of monthly cell-days, ~80% interval for estimated years';
+    const r = rawRatio(h, d.model);
+    viewNote.textContent = raw
+      ? `${r ? `VIIRS sees about ${r.toFixed(1)}× more cell-days than MODIS here (same months), so raw counts jump in 2012. ` : ''}` +
+        'Other panels stay harmonized.'
+      : 'Before 2012: MODIS put on the VIIRS scale by the model.';
+  }
+
   // ------------------------------------------------------------------ flow
 
   async function show() {
@@ -734,14 +1244,19 @@ import Base from '../layouts/Base.astro';
       setPeriodSelects(monthStr(firstAbs + fromIdx), monthStr(firstAbs + toIdx));
       syncControls(country);
 
-      current = { country, d, h, fromIdx, toIdx };
+      current = { country, d, h, hc, fromIdx, toIdx };
+      // Month on the map: keep it when it is inside the period, else the last month of the period.
+      if (selAbs === null || selAbs < firstAbs + fromIdx || selAbs > firstAbs + toIdx) selAbs = firstAbs + toIdx;
+      const hv = state.view === 'raw' ? rawSplice(h, d.model) : h;
+      syncView(h, d);
       areaMap?.show(country.code, country.bbox, shape);
+      updateMapLayer();
       renderNow(country, d, h);
       renderAnomalies(h, fromIdx, toIdx);
       updateExportNote();
-      await renderCalendar(country, d, h, fromIdx, toIdx);
+      await renderCalendar(country, d, hv, fromIdx, toIdx);
       if (id !== requestId) return;
-      await renderAnnual(country, d, h, fromIdx, toIdx);
+      await renderAnnual(country, d, hv, fromIdx, toIdx);
       if (id !== requestId) return;
       status.textContent = '';
       console.info(`[seamless-fire] ${country.code}: first chart ${(performance.now() - t0).toFixed(0)} ms after select`);
@@ -756,7 +1271,7 @@ import Base from '../layouts/Base.astro';
 
   function applyHash() {
     const p = parseHash(location.hash);
-    state = { code: p.code || 'PL', area: p.area, from: p.from, to: p.to };
+    state = { code: p.code || 'PL', area: p.area, from: p.from, to: p.to, view: p.view };
     if (state.area.kind === 'preset') {
       const pr = PRESETS.find((x) => x.id === (state.area as { id: string }).id);
       if (pr && p.code && pr.country !== state.code) state.area = { kind: 'country' };
@@ -779,6 +1294,7 @@ import Base from '../layouts/Base.astro';
     try {
       const { AreaMap } = await import('../lib/map');
       areaMap = new AreaMap($('map'), {
+        padding: mapPadding,
         onPolygon: (ring) => setState({ area: { kind: 'shape', shape: { kind: 'polygon', ring } } }),
         onDrawState: (drawing, points) => {
           btnDraw.hidden = drawing;
@@ -796,7 +1312,10 @@ import Base from '../layouts/Base.astro';
       btnCancel.addEventListener('click', () => areaMap!.cancelDrawing());
       btnDraw.disabled = false;
       hint.textContent = 'Or pick an example / enter a rectangle.';
-      if (current) areaMap.show(current.country.code, current.country.bbox, resolveShape(state.area));
+      if (current) {
+        areaMap.show(current.country.code, current.country.bbox, resolveShape(state.area));
+        updateMapLayer();
+      }
     } catch (err) {
       console.error(err);
       $('map').hidden = true;
@@ -852,6 +1371,10 @@ import Base from '../layouts/Base.astro';
         areaNote.innerHTML = `<span class="warn">${escapeHtml(err instanceof Error ? err.message : String(err))}</span>`;
       }
     });
+    viewBtns.forEach((b) => b.addEventListener('click', () => {
+      const view = b.dataset.view === 'raw' ? 'raw' : undefined;
+      if (view !== state.view) setState({ view });
+    }));
     for (const s of [fromM, fromY, toM, toY]) s.addEventListener('change', () => setState(readPeriod()));
     $('full-period').addEventListener('click', () => setState({ from: undefined, to: undefined }));
     dlMonthly.addEventListener('click', () => {
@@ -866,8 +1389,9 @@ import Base from '../layouts/Base.astro';
     dlHotspots.addEventListener('click', startHotspotExport);
     dlCancel.addEventListener('click', () => exportJob?.abort());
     window.addEventListener('hashchange', applyHash);
-    applyHash();
+    initPanels();
     initMap();
+    applyHash();
   }
 
   init();

@@ -159,6 +159,12 @@ Area polygon: Leaflet map where the user draws a polygon (rectangle inputs stay 
 fallback without the map). Presets may be polygons (e.g. Biebrza outline). Hotspot CSV export
 uses point-in-polygon on hotspots. Optional: cell map for a selected month.
 
+Layout (user decision, 2026-11-14): map-first like the EFFIS viewer, own styling. Full-screen Leaflet
+map (Sentinel-2 cloudless base from EOX, OSM option), left control panel, floating "Now" card, bottom dock
+with tabs (Calendar, Per year, Top anomalies, How to read it). Map layer = per-cell share of the harmonized
+value (`src/lib/cellmap.ts`, same rule as `harmonizeArea`); clicking a calendar month or anomaly row maps it.
+Below 860 px the panels stack under the map.
+
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 - GitHub: `figielak/seamless-fire` (remote `origin`, SSH), site https://figielak.github.io/seamless-fire/. `site`/`base` come from env `SITE`/`BASE`, set by `.github/workflows/deploy.yml` from `configure-pages`
