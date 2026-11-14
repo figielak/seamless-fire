@@ -163,7 +163,10 @@ Layout (user decision, 2026-11-14): map-first like the EFFIS viewer, own styling
 map (Sentinel-2 cloudless base from EOX, OSM option), left control panel, floating "Now" card, bottom dock
 with tabs (Calendar, Per year, Top anomalies, How to read it). Map layer = per-cell share of the harmonized
 value (`src/lib/cellmap.ts`, same rule as `harmonizeArea`); clicking a calendar month or anomaly row maps it.
-Below 860 px the panels stack under the map.
+Below 860 px the panels stack under the map. Map colours use one fixed scale for all countries
+(month: 0–31 cell-days per cell; period: average per year, 0–30). "All countries (8)" entry
+(`src/lib/world.ts`): each country harmonized with its own model, then summed (series, annual totals
+and intervals, map layers); hotspot export only per country.
 
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 

@@ -25,7 +25,7 @@ import Base from '../layouts/Base.astro';
           <span id="status" class="status" role="status"></span>
           <fieldset class="row">
             <legend class="sr-only">Area</legend>
-            <label class="radio"><input type="radio" name="mode" value="country" checked /> Whole country</label>
+            <label class="radio"><input type="radio" name="mode" value="country" checked /> <span id="whole-label">Whole country</span></label>
             <label class="radio"><input type="radio" name="mode" value="custom" /> Custom area</label>
           </fieldset>
           <div id="custom" class="custom" hidden>
@@ -591,6 +591,7 @@ import Base from '../layouts/Base.astro';
   import { monthStats, topAnomalies } from '../lib/stats';
   import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
   import { cellLayer } from '../lib/cellmap';
+  import { WORLD_CODE, mergeLayers, sumAnnual, sumSeries, unionBBox, worldModel } from '../lib/world';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const MONTHS_LONG = [
@@ -638,6 +639,7 @@ import Base from '../layouts/Base.astro';
   // h = series of the selected area (or the country); hc = country series (map layer shares).
   let current: {
     country: Country; d: CountryData; h: Harmonized; hc: Harmonized; fromIdx: number; toIdx: number;
+    parts?: { d: CountryData; hc: Harmonized; h: Harmonized }[]; // "All countries": per-country results
   } | null = null;
   let mapMode: 'month' | 'period' = 'month';
   let selAbs: number | null = null; // month shown on the map (absolute month number)
@@ -870,7 +872,11 @@ import Base from '../layouts/Base.astro';
 
   async function renderAnnual(country: Country, d: CountryData, h: Harmonized, fromIdx: number, toIdx: number) {
     const Plotly = await plotly();
-    const t = annualTotals(h, d.model, fromIdx, toIdx);
+    // "All countries": annual totals (and intervals) per country, then summed.
+    const parts = current?.parts;
+    const t = parts && !h.raw
+      ? sumAnnual(parts.map((p) => ({ h: p.h, model: p.d.model })), fromIdx, toIdx)
+      : annualTotals(h, d.model, fromIdx, toIdx);
     const hasInterval = t.map((x) => x.hi > x.lo);
     const vy = Math.floor(monthAbs(d.model.viirs_first_month) / 12);
     // Raw: grey = MODIS years, blue = VIIRS years (2012 is VIIRS except January).
@@ -966,6 +972,11 @@ import Base from '../layouts/Base.astro';
   function updateExportNote() {
     if (!current) return;
     const { d, country } = current;
+    if (country.code === WORLD_CODE) {
+      dlHotspots.disabled = true;
+      dlNote.textContent = 'Hotspot files are per country: choose one country to download them.';
+      return;
+    }
     if (!d.model.hotspots) {
       dlHotspots.disabled = true;
       dlNote.innerHTML = `Hotspot files for ${escapeHtml(country.name)} are too large for this site. ` +
@@ -1044,11 +1055,15 @@ import Base from '../layouts/Base.astro';
     $<HTMLButtonElement>('map-next').disabled = mapMode !== 'month' || i >= toIdx;
     markCalendar();
     if (!areaMap) return;
+    // "All countries": each country's cells with its own shares, merged.
+    const layerFor = (a: number, b: number) => current!.parts
+      ? mergeLayers(current!.parts.map((p) => cellLayer(p.d.cells, p.hc, a, b)))
+      : cellLayer(d.cells, hc, a, b);
     if (mapMode === 'month') {
-      areaMap.setCells(cellLayer(d.cells, hc, i, i), title, MAP_SCALE.month);
+      areaMap.setCells(layerFor(i, i), title, MAP_SCALE.month);
     } else {
       // Whole period: average per year, so the colour scale does not depend on the period length.
-      const layer = cellLayer(d.cells, hc, fromIdx, toIdx);
+      const layer = layerFor(fromIdx, toIdx);
       const perYear = 12 / layer.months;
       for (let j = 0; j < layer.value.length; j++) layer.value[j] *= perYear;
       layer.max *= perYear;
@@ -1163,13 +1178,14 @@ import Base from '../layouts/Base.astro';
   }
 
   function fillPresets(code: string) {
-    const list = PRESETS.filter((p) => p.country === code);
+    const list = PRESETS.filter((p) => p.country === code || code === WORLD_CODE);
     presetSel.innerHTML = '<option value="">(none)</option>' +
       list.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     presetSel.disabled = !list.length;
   }
 
   function syncControls(country: Country) {
+    $('whole-label').textContent = country.code === WORLD_CODE ? 'All countries' : 'Whole country';
     const custom = state.area.kind !== 'country';
     modeRadios.forEach((r) => (r.checked = r.value === (custom ? 'custom' : 'country')));
     customEl.hidden = !custom;
@@ -1239,13 +1255,34 @@ import Base from '../layouts/Base.astro';
     status.textContent = `Loading ${country.name}…`;
     try {
       const t0 = performance.now();
-      const d = await loadCountry(country.code);
-      if (id !== requestId) return; // a newer selection won
-      const n = monthCount(d.cells.first_month, d.model.last_complete_month);
-      const hc = harmonize(monthlyTotals(d.cells, n), d.model);
-      let h = hc;
       const shape = resolveShape(state.area);
-      if (shape) h = harmonizeArea(monthlyTotals(d.cells, n, keepFn(shape)), hc, d.model);
+      const one = (dc: CountryData) => {
+        const nc = monthCount(dc.cells.first_month, dc.model.last_complete_month);
+        const hcc = harmonize(monthlyTotals(dc.cells, nc), dc.model);
+        const hh = shape ? harmonizeArea(monthlyTotals(dc.cells, nc, keepFn(shape)), hcc, dc.model) : hcc;
+        return { d: dc, hc: hcc, h: hh };
+      };
+      let d: CountryData, hc: Harmonized, h: Harmonized;
+      let parts: { d: CountryData; hc: Harmonized; h: Harmonized }[] | undefined;
+      if (country.code === WORLD_CODE) {
+        // Every country harmonized with its own model, then summed.
+        const all = await Promise.all(countries.filter((c) => c.code !== WORLD_CODE).map((c) => loadCountry(c.code)));
+        if (id !== requestId) return;
+        parts = all.map(one);
+        const model = worldModel(all.map((x) => x.model));
+        const c0 = all[0].cells;
+        d = {
+          code: WORLD_CODE, model, timing: all[0].timing,
+          cells: { first_month: c0.first_month, cell_deg: c0.cell_deg, lat: [], lon: [], m: [], modis: [], viirs: [] },
+        };
+        hc = sumSeries(parts.map((p) => p.hc));
+        h = shape ? sumSeries(parts.map((p) => p.h)) : hc;
+      } else {
+        d = await loadCountry(country.code);
+        if (id !== requestId) return; // a newer selection won
+        ({ hc, h } = one(d));
+      }
+      const n = monthCount(d.cells.first_month, d.model.last_complete_month);
 
       // Period: clamp to the data; full period is not written to the link.
       const firstAbs = monthAbs(d.cells.first_month);
@@ -1259,7 +1296,7 @@ import Base from '../layouts/Base.astro';
       setPeriodSelects(monthStr(firstAbs + fromIdx), monthStr(firstAbs + toIdx));
       syncControls(country);
 
-      current = { country, d, h, hc, fromIdx, toIdx };
+      current = { country, d, h, hc, fromIdx, toIdx, parts };
       // Month on the map: keep it when it is inside the period, else the last month of the period.
       if (selAbs === null || selAbs < firstAbs + fromIdx || selAbs > firstAbs + toIdx) selAbs = firstAbs + toIdx;
       const hv = state.view === 'raw' ? rawSplice(h, d.model) : h;
@@ -1289,7 +1326,7 @@ import Base from '../layouts/Base.astro';
     state = { code: p.code || 'PL', area: p.area, from: p.from, to: p.to, view: p.view };
     if (state.area.kind === 'preset') {
       const pr = PRESETS.find((x) => x.id === (state.area as { id: string }).id);
-      if (pr && p.code && pr.country !== state.code) state.area = { kind: 'country' };
+      if (pr && p.code && pr.country !== state.code && state.code !== WORLD_CODE) state.area = { kind: 'country' };
     }
     if (state.area.kind !== 'country') lastCustom = state.area;
     show().then(() => {
@@ -1343,6 +1380,10 @@ import Base from '../layouts/Base.astro';
     plotly(); // start loading Plotly in parallel with the data
     try {
       countries = await fetchJson<Country[]>('countries.json');
+      countries = [
+        { code: WORLD_CODE, name: `All countries (${countries.length})`, bbox: unionBBox(countries.map((c) => c.bbox)) },
+        ...countries,
+      ];
     } catch {
       status.textContent = 'No data found. Run: python pipeline/build_data.py';
       return;
@@ -1357,7 +1398,8 @@ import Base from '../layouts/Base.astro';
       const country = countries.find((c) => c.code === code)!;
       // Keep a drawn area only when it overlaps the new country; presets belong to one country.
       let area = state.area;
-      if (area.kind === 'preset' && PRESETS.find((p) => p.id === (area as { id: string }).id)?.country !== code) area = { kind: 'country' };
+      if (area.kind === 'preset' && code !== WORLD_CODE &&
+        PRESETS.find((p) => p.id === (area as { id: string }).id)?.country !== code) area = { kind: 'country' };
       const shape = area.kind === 'shape' ? area.shape : null;
       if (shape && !bboxOverlap(shapeBBox(shape), country.bbox)) area = { kind: 'country' };
       lastCustom = area.kind === 'country' ? null : area;

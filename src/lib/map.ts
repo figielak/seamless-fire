@@ -191,9 +191,12 @@ export class AreaMap {
   /** Show the country frame and the area; fit the view when the selection changed. */
   show(code: string, countryBBox: BBox, shape: Shape | null) {
     this.countryLayer?.remove();
-    this.countryLayer = L.rectangle(bounds(countryBBox), {
-      color: '#57606a', weight: 1, fill: false, dashArray: '2 4', interactive: false,
-    }).addTo(this.map);
+    this.countryLayer = null;
+    if (code !== 'ALL') { // no frame around the whole world
+      this.countryLayer = L.rectangle(bounds(countryBBox), {
+        color: '#57606a', weight: 1, fill: false, dashArray: '2 4', interactive: false,
+      }).addTo(this.map);
+    }
     this.areaLayer?.remove();
     this.areaLayer = null;
     if (shape) {
