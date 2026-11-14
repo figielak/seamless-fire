@@ -8,8 +8,9 @@ Updated: 2026-11-14
 ## Where we are
 
 - Stage: **7 done** (README written and live). All planned stages done; remaining: final checks before judging (Sun 15.11 13:00)
-- Main page `src/pages/index.astro` is map-first: full-screen Leaflet map, left control panel (country, area,
-  period, raw/harmonized toggle in "Values"), Now card, bottom dock (Calendar / Per year / Anomalies / About).
+- Main page `src/pages/index.astro`: CSS grid, nothing floats over the map (2026-11-14):
+  controls left | "Now" strip on top | map and chart panel (Calendar / Per year / Anomalies / About) side by side.
+  Calendar rows fit the panel height; colour range starts at P2 of non-flagged months. Below 1150 px: one column.
   Map layer = per-cell share of the harmonized total (`src/lib/cellmap.ts`; preset cells sum to `harmonizeArea`).
 - "All countries (8)" view: `WORLD_CODE = 'ALL'` (`src/lib/world.ts`): each country harmonized with its own model,
   then summed; hotspot export stays per country; live cold first load ~7 s. Map colours: one fixed scale for all countries.

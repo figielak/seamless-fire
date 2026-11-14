@@ -4,17 +4,15 @@ import Base from '../layouts/Base.astro';
 
 <Base title="Seamless Fire" app>
   <div class="app">
-    <div id="map" class="map" aria-label="Map of fire cells and the selected area"></div>
-
     <aside class="panel left" id="panel-left" aria-label="Controls">
       <div class="panel-head">
-        <h1>Seamless Fire</h1>
+        <h1>Controls</h1>
         <button type="button" id="toggle-left" class="icon" aria-expanded="true" title="Hide controls">‹</button>
       </div>
       <div class="panel-body">
         <p class="lead">
-          Burning activity 2000 → today on one scale: MODIS (2000–) and VIIRS (2012–) hotspots
-          harmonized, so years before and after 2012 can be compared.
+          Fire activity since 2000 on one scale: MODIS and VIIRS hotspots harmonized, so years
+          before and after 2012 compare directly.
         </p>
 
         <details open class="sec">
@@ -57,8 +55,8 @@ import Base from '../layouts/Base.astro';
         <details open class="sec">
           <summary>Period</summary>
           <div class="row period">
-            <label>From <select id="from-m" class="small"></select><select id="from-y" class="small"></select></label>
-            <label>To <select id="to-m" class="small"></select><select id="to-y" class="small"></select></label>
+            <label><span>From</span><select id="from-m" class="small" aria-label="From month" disabled><option>…</option></select><select id="from-y" class="small" aria-label="From year" disabled><option>…</option></select></label>
+            <label><span>To</span><select id="to-m" class="small" aria-label="To month" disabled><option>…</option></select><select id="to-y" class="small" aria-label="To year" disabled><option>…</option></select></label>
           </div>
           <button type="button" id="full-period">Full period</button>
         </details>
@@ -67,7 +65,7 @@ import Base from '../layouts/Base.astro';
           <summary>Values</summary>
           <div class="view-toggle" role="group" aria-label="Calendar values">
             <button type="button" data-view="harmonized" aria-pressed="true">Harmonized</button>
-            <button type="button" data-view="raw" aria-pressed="false">Raw (MODIS, then VIIRS)</button>
+            <button type="button" data-view="raw" aria-pressed="false" title="Raw counts: MODIS before 2012, then VIIRS">Raw</button>
           </div>
           <p id="view-note" class="note"></p>
         </details>
@@ -75,12 +73,12 @@ import Base from '../layouts/Base.astro';
         <details open class="sec">
           <summary>Map layer</summary>
           <div class="row">
-            <label class="radio"><input type="radio" name="mapmode" value="month" checked /> One month</label>
-            <label class="radio"><input type="radio" name="mapmode" value="period" /> Whole period</label>
+            <label class="radio"><input type="radio" name="mapmode" value="month" checked autocomplete="off" /> One month</label>
+            <label class="radio"><input type="radio" name="mapmode" value="period" autocomplete="off" /> Whole period</label>
           </div>
           <div class="row month-step">
             <button type="button" id="map-prev" class="icon" title="Previous month">‹</button>
-            <span id="map-month" class="map-month"></span>
+            <span id="map-month" class="map-month">—</span>
             <button type="button" id="map-next" class="icon" title="Next month">›</button>
           </div>
           <p class="note">Click a month in the calendar to show it on the map. Each cell gets its share of
@@ -100,7 +98,14 @@ import Base from '../layouts/Base.astro';
       </div>
     </aside>
 
-    <section id="now" class="panel now" aria-live="polite" hidden></section>
+    <section id="now" class="panel now" aria-live="polite">
+      <div class="now-head"><h2>Now</h2><p class="now-month">Loading the latest month…</p></div>
+      <div class="skel" aria-hidden="true"><span></span><span></span><span></span></div>
+    </section>
+
+    <div class="map-wrap">
+      <div id="map" class="map" aria-label="Map of fire cells and the selected area"></div>
+    </div>
 
     <section class="dock" id="dock" aria-label="Charts">
       <div class="dock-tabs" role="tablist">
@@ -108,9 +113,6 @@ import Base from '../layouts/Base.astro';
         <button type="button" role="tab" data-tab="annual" aria-selected="false">Per year</button>
         <button type="button" role="tab" data-tab="anomalies" aria-selected="false">Top anomalies</button>
         <button type="button" role="tab" data-tab="about" aria-selected="false">How to read it</button>
-        <span class="spacer"></span>
-        <button type="button" id="dock-size" class="icon" title="Taller panel">▴</button>
-        <button type="button" id="dock-toggle" class="icon" title="Hide panel">▾</button>
       </div>
       <div class="dock-body">
         <div class="tab" data-tab="calendar">
@@ -168,9 +170,29 @@ import Base from '../layouts/Base.astro';
 </Base>
 
 <style>
+  /* Grid layout, nothing floats over the map:
+       controls | Now strip (map + charts width)
+       controls | map | charts                     */
   .app {
     position: fixed;
     inset: var(--header-h) 0 0 0;
+    display: grid;
+    grid-template-columns: var(--left-w) minmax(0, 1fr) minmax(500px, 46%);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+    overflow: hidden;
+  }
+  .app:has(.left.collapsed) {
+    grid-template-columns: 46px minmax(0, 1fr) minmax(500px, 46%);
+  }
+  .map-wrap {
+    grid-row: 2;
+    grid-column: 2;
+    position: relative;
+    min-height: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     overflow: hidden;
   }
   .map {
@@ -181,29 +203,28 @@ import Base from '../layouts/Base.astro';
   }
   .panel,
   .dock {
-    position: absolute;
-    z-index: 1100;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    min-width: 0;
+    min-height: 0;
   }
   .left {
-    top: 10px;
-    left: 10px;
-    bottom: 10px;
-    width: var(--left-w);
+    grid-row: 1 / 3;
+    grid-column: 1;
     display: flex;
     flex-direction: column;
-    max-height: calc(100% - 20px);
-    height: max-content;
+    align-self: start;
+    max-height: 100%;
   }
-  .left.collapsed {
-    bottom: auto;
-    width: auto;
-  }
-  .left.collapsed .panel-body {
+  .left.collapsed .panel-body,
+  .left.collapsed h1 {
     display: none;
+  }
+  .left.collapsed .panel-head {
+    padding: 0.45rem;
+    justify-content: center;
   }
   .panel-head {
     display: flex;
@@ -227,8 +248,10 @@ import Base from '../layouts/Base.astro';
     padding: 0.3rem 0.9rem 0.8rem;
   }
   .lead {
-    font-size: 0.88rem;
-    margin: 0.4rem 0 0.2rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    margin: 0.5rem 0 0.5rem;
   }
   .sec {
     border-top: 1px solid var(--line);
@@ -285,13 +308,25 @@ import Base from '../layouts/Base.astro';
     border: 1px solid var(--line);
     border-radius: 6px;
   }
+  .period {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
   .period label {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 2.6rem 1fr 1fr;
     gap: 0.3rem;
     align-items: center;
+    font-weight: 400;
+  }
+  .period select {
+    width: 100%;
   }
   .view-toggle {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
     border: 1px solid var(--line);
     border-radius: 6px;
     overflow: hidden;
@@ -317,26 +352,25 @@ import Base from '../layouts/Base.astro';
     font-size: 0.92rem;
   }
   .now {
-    top: 10px;
-    right: 56px;
-    width: 300px;
-    max-height: calc(100% - var(--dock-h) - 30px);
-    overflow-y: auto;
-    padding: 0.7rem 0.9rem;
+    grid-row: 1;
+    grid-column: 2 / 4;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 2rem;
+    padding: 0.6rem 1rem;
+    border-left: 4px solid var(--head);
+  }
+  .now > .skel {
+    flex: 1;
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 40rem;
   }
   .dock {
-    left: calc(var(--left-w) + 20px);
-    right: 10px;
-    bottom: 10px;
-    height: var(--dock-h);
+    grid-row: 2;
+    grid-column: 3;
     display: flex;
     flex-direction: column;
-  }
-  .dock.collapsed {
-    height: auto;
-  }
-  .dock.collapsed .dock-body {
-    display: none;
   }
   .dock-tabs {
     display: flex;
@@ -358,8 +392,31 @@ import Base from '../layouts/Base.astro';
     border-bottom-color: var(--accent);
     font-weight: 700;
   }
-  .dock-tabs .spacer {
-    flex: 1;
+  .skel {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.3rem 0 0.6rem;
+  }
+  .skel span {
+    display: block;
+    height: 0.9rem;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #eceff3 25%, #f6f7f9 50%, #eceff3 75%);
+    background-size: 200% 100%;
+    animation: skel 1.4s linear infinite;
+  }
+  .skel span {
+    height: 2rem;
+  }
+  @keyframes skel {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skel span {
+      animation: none;
+    }
   }
   .dock-body {
     flex: 1;
@@ -390,29 +447,20 @@ import Base from '../layouts/Base.astro';
     overflow: hidden;
     clip: rect(0 0 0 0);
   }
-  /* Phones and small tablets: map on top, panels below in normal flow. */
-  @media (max-width: 860px) {
-    .app {
+  /* Narrow screens: one column in normal page flow (controls, Now, map, charts). */
+  @media (max-width: 1150px) {
+    .app,
+    .app:has(.left.collapsed) {
       position: static;
+      display: flex;
+      flex-direction: column;
       overflow: visible;
     }
-    .map {
-      position: relative;
+    .map-wrap {
       height: 60vh;
-    }
-    .panel,
-    .dock {
-      position: static;
-      width: auto;
-      height: auto;
-      max-height: none;
-      margin: 10px;
     }
     .dock-body {
       overflow: visible;
-    }
-    #dock-size {
-      display: none;
     }
   }
 </style>
@@ -474,26 +522,76 @@ import Base from '../layouts/Base.astro';
   table.anom tbody tr:hover {
     background: #f1f3f5;
   }
-  /* "Now" card injected by renderNow(): one compact column in the floating panel. */
+  /* "Now" strip injected by renderNow(): one row of key figures above the map and charts. */
   section.now h2 {
-    font-size: 1rem;
-    margin-bottom: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
   }
-  section.now .now-grid {
-    grid-template-columns: 1fr;
-    gap: 0.4rem;
+  section.now .now-month {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.3;
   }
-  section.now .value {
-    font-size: 1.9rem;
+  section.now .now-month .flag {
+    display: inline-block;
+    margin: 0 0 0 0.3rem;
+    padding: 0 0.4rem;
+    border-radius: 4px;
+    background: #fdecea;
+    font-size: 0.75rem;
+    font-weight: 600;
+    vertical-align: 0.15em;
   }
-  section.now .ratio {
-    font-size: 1.15rem;
+  section.now .now-fig {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+  section.now .now-fig b {
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+  section.now .now-fig span {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  section.now .now-fig.hi b {
+    color: var(--hi);
+  }
+  section.now .now-fig.lo b {
+    color: var(--lo);
   }
   section.now dl {
-    font-size: 0.85rem;
+    display: flex;
+    gap: 0.3rem 1.6rem;
+    flex-wrap: wrap;
+    margin: 0;
+    padding-left: 1.6rem;
+    border-left: 1px solid var(--line);
+    font-size: 0.82rem;
   }
-  section.now .note {
-    font-size: 0.8rem;
+  section.now dl div {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  section.now dt {
+    color: var(--muted);
+  }
+  section.now dd {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  section.now .now-note {
+    flex: 1 1 14rem;
+    font-size: 0.78rem;
+    margin: 0;
+    text-align: right;
   }
   .map-legend {
     background: rgba(255, 255, 255, 0.93);
@@ -557,31 +655,25 @@ import Base from '../layouts/Base.astro';
   .leaflet-container {
     font: 12px/1.4 system-ui, sans-serif;
   }
+  /* the attribution is long; keep the legend above it */
   .leaflet-bottom.leaflet-left {
-    /* keep the legend clear of the dock */
-    left: calc(var(--left-w) + 20px);
-    bottom: calc(var(--dock-h) + 14px);
+    bottom: 22px;
   }
-  body.dock-closed .leaflet-bottom.leaflet-left {
-    bottom: 60px;
+  .leaflet-control-attribution {
+    border-radius: 4px 0 0 0;
+    font-size: 10px;
   }
-  .leaflet-bottom.leaflet-right {
-    bottom: calc(var(--dock-h) + 14px);
+  .map-legend[hidden] {
+    display: none;
   }
-  body.dock-closed .leaflet-bottom.leaflet-right {
-    bottom: 50px;
+  /* Country borders and labels of the EOX overlay: neutral grey instead of orange, so they do not
+     compete with the fire colours. */
+  .labels-overlay {
+    filter: grayscale(1) brightness(1.15);
+    opacity: 0.75;
   }
   @media (max-width: 860px) {
-    .leaflet-bottom.leaflet-left,
-    .leaflet-bottom.leaflet-right,
-    body.dock-closed .leaflet-bottom.leaflet-left,
-    body.dock-closed .leaflet-bottom.leaflet-right {
-      left: 0;
-      bottom: 0;
-    }
-    /* the attribution wraps to several lines on phones; keep the legend above it */
-    .leaflet-bottom.leaflet-left,
-    body.dock-closed .leaflet-bottom.leaflet-left {
+    .leaflet-bottom.leaflet-left {
       bottom: 48px;
     }
     .map-legend .lg-mode span,
@@ -632,8 +724,8 @@ import Base from '../layouts/Base.astro';
   // Fixed map colour scales (log), shared by all countries. A cell has at most 31 cell-days in
   // a month; per-cell 99th percentiles are 6–15 per month and 4–19 per year (2012–2025, 8 countries).
   const MAP_SCALE = {
-    month: { max: 31, unit: 'cell-days in the month per 0.1° cell, log scale' },
-    period: { max: 30, unit: 'cell-days per year per 0.1° cell (period average), log scale' },
+    month: { max: 31, unit: 'Cell-days in the month per 0.1° cell, log scale' },
+    period: { max: 30, unit: 'Cell-days per year per 0.1° cell (period average), log scale' },
   };
   const FIRMS_URL = 'https://firms.modaps.eosdis.nasa.gov/download/';
 
@@ -716,42 +808,38 @@ import Base from '../layouts/Base.astro';
     const calName = MONTHS_LONG[(monthAbs(s.month) % 12)];
     let compare: string;
     if (s.ratio === null) {
-      compare = `<p class="big-note">Not enough history for a typical value.</p>`;
+      compare = `<p class="note">Not enough history for a typical value.</p>`;
     } else {
       const r = s.ratio;
       const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
       const cls = r >= 1.25 ? 'hi' : r <= 0.8 ? 'lo' : 'mid';
       compare = `
-        <p class="ratio ${cls}">${r >= 10 ? r.toFixed(0) : r.toFixed(1)}× typical
-          <span>(${word} the usual ${calName})</span></p>
+        <div class="now-fig ${cls}"><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b>
+          <span>typical, ${word} the usual ${calName}</span></div>
         <dl>
-          <dt>Typical ${calName} (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd>
-          <dt>Usual range in those years (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd>
-          <dt>Rank among ${s.nAll} ${calName}s since 2000</dt>
-          <dd>higher than ${Math.round(s.percentile)}%</dd>
+          <div><dt>Typical ${calName} (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
+          <div><dt>Usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
+          <div><dt>Rank among ${s.nAll} ${calName}s since 2000</dt>
+          <dd>higher than ${Math.round(s.percentile)}%</dd></div>
         </dl>`;
     }
     const interval = h.estimated[idx]
-      ? `<p class="note">Estimated from MODIS, ~80% interval ${fmt(h.lo[idx])} – ${fmt(h.hi[idx])}.</p>`
+      ? `, estimated (~80%: ${fmt(h.lo[idx])} – ${fmt(h.hi[idx])})`
       : '';
     const flags = [
-      h.preliminary[idx] ? 'preliminary data (near real-time)' : '',
-      h.lowQuality[idx] ? 'known sensor problem this month' : '',
+      h.preliminary[idx] ? 'preliminary (near real-time)' : '',
+      h.lowQuality[idx] ? 'known sensor problem' : '',
     ].filter(Boolean);
     const label = areaLabel(state.area);
     nowEl.innerHTML = `
-      <h2>Now: ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}, ${monthLabel(s.month)}</h2>
-      <div class="now-grid">
-        <div>
-          <p class="value">${fmt(s.value)} <span>fire cell-days</span></p>
-          ${interval}
-          ${flags.length ? `<p class="flag">${flags.join('; ')}</p>` : ''}
-        </div>
-        <div>${compare}</div>
+      <div class="now-head">
+        <h2>Now · ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}</h2>
+        <p class="now-month">${monthLabel(s.month)}${flags.map((f) => `<span class="flag">${f}</span>`).join('')}</p>
       </div>
-      <p class="note">Latest complete month in the data
-        (${escapeHtml(d.model.last_complete_month)}). Model ${escapeHtml(d.model.model)},
-        VIIRS S-NPP scale.${h.area ? ' Custom area: higher uncertainty than for the whole country.' : ''}</p>`;
+      <div class="now-fig"><b>${fmt(s.value)}</b><span>fire cell-days${interval}</span></div>
+      ${compare}
+      <p class="note now-note">Latest complete month in the data. VIIRS S-NPP scale, model
+        ${escapeHtml(d.model.model)}.${h.area ? ' Custom area: higher uncertainty than for the whole country.' : ''}</p>`;
     nowEl.hidden = false;
   }
 
@@ -798,7 +886,18 @@ import Base from '../layouts/Base.astro';
       text[r][c] = lines.join('<br>');
     }
 
-    const ticks = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000].filter((t) => t <= Math.max(max, 1) * 1.05);
+    // Colour range from the 2nd percentile up: large areas never get near 0, and a range starting
+    // at 0 would paint every month in the same bright end of the scale.
+    // Months with sensor problems (e.g. Terra-only 2000) are left out of the range.
+    const shown: number[] = [];
+    for (let i = fromIdx; i <= toIdx; i++) if (!h.lowQuality[i]) shown.push(h.value[i]);
+    shown.sort((p, q) => p - q);
+    const low = shown[Math.floor(shown.length * 0.02)] ?? 0;
+    const zmin = low >= 10 ? Math.log10(1 + low) : 0;
+    const inRange = (t: number) => t <= Math.max(max, 1) * 1.05 && Math.log10(1 + t) >= zmin - 1e-9;
+    let ticks = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000].filter(inRange);
+    if (ticks.length < 4) ticks = [1, 2, 5].flatMap((m) => [1, 10, 100, 1000, 10000, 100000].map((p) => m * p))
+      .sort((p, q) => p - q).filter(inRange);
     const data: Partial<Plotly.Data>[] = [
       {
         type: 'heatmap',
@@ -809,8 +908,8 @@ import Base from '../layouts/Base.astro';
         hovertemplate: '%{text}<extra></extra>',
         hoverongaps: false,
         colorscale: 'Cividis',
-        zmin: 0,
-        zmax: Math.log10(1 + Math.max(max, 1)),
+        zmin,
+        zmax: Math.max(Math.log10(1 + Math.max(max, 1)), zmin + 0.1),
         xgap: 1,
         ygap: 1,
         showlegend: false,
@@ -849,8 +948,12 @@ import Base from '../layouts/Base.astro';
     const estLabel = `${MONTHS[first % 12]} ${Math.floor(first / 12)} – ${MONTHS[lastEst % 12]} ${Math.floor(lastEst / 12)}`;
 
     const narrow = calEl.clientWidth < 560;
+    // Fit all years into the chart panel when it has room (rows 16–30 px), else let it scroll.
+    const body = calEl.closest<HTMLElement>('.dock-body');
+    const avail = body && body.clientHeight > 300 ? body.clientHeight - 80 : 0;
+    const rowH = avail ? Math.min(30, Math.max(16, Math.floor((avail - 100) / years.length))) : 20;
     const layout: Partial<Plotly.Layout> = {
-      height: Math.max(260, years.length * 20 + 110),
+      height: Math.max(260, years.length * rowH + 100),
       margin: { l: 44, r: 10, t: 28, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -894,7 +997,9 @@ import Base from '../layouts/Base.astro';
         ? `Above the red line (<b>${estLabel}</b>): estimated from MODIS. Below: observed VIIRS.`
         : 'All shown months are estimated from MODIS.');
     } else parts.push('All shown months are observed VIIRS.');
-    parts.push('Color scale is logarithmic.');
+    parts.push(zmin > 0
+      ? `Color scale is logarithmic; months below ${fmt(low)} share the darkest colour.`
+      : 'Color scale is logarithmic.');
     if (h.area && !h.raw) parts.push('Before 2012 the area gets its share of the country estimate (area MODIS / country MODIS).');
     noteEl.innerHTML = parts.join(' ');
   }
@@ -1125,14 +1230,15 @@ import Base from '../layouts/Base.astro';
   // ------------------------------------------------------------------ panels
 
   function mapPadding(): { topLeft: [number, number]; bottomRight: [number, number] } {
-    if (window.matchMedia('(max-width: 860px)').matches) return { topLeft: [12, 12], bottomRight: [12, 12] };
-    const left = $('panel-left').getBoundingClientRect();
-    const dock = $('dock').getBoundingClientRect();
-    const mapRect = $('map').getBoundingClientRect();
-    return {
-      topLeft: [Math.max(left.right - mapRect.left + 12, 12), 12],
-      bottomRight: [12, Math.max(mapRect.bottom - dock.top + 12, 12)],
-    };
+    // nothing floats over the map; leave room for the legend in the bottom-left corner
+    return { topLeft: [12, 12], bottomRight: [12, 24] };
+  }
+
+  /** Re-render the calendar so its rows fit the new panel height. */
+  function rerenderCalendar() {
+    if (!current) return;
+    const { country, d, h, fromIdx, toIdx } = current;
+    renderCalendar(country, d, state.view === 'raw' ? rawSplice(h, d.model) : h, fromIdx, toIdx);
   }
 
   function resizeCharts() {
@@ -1148,38 +1254,26 @@ import Base from '../layouts/Base.astro';
   function initPanels() {
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('.dock-tabs [role=tab]')];
     const bodies = [...document.querySelectorAll<HTMLElement>('.dock-body .tab')];
-    const dock = $('dock');
-    const open = () => {
-      dock.classList.remove('collapsed');
-      document.body.classList.remove('dock-closed');
-      $('dock-toggle').textContent = '▾';
-    };
     tabs.forEach((t) => t.addEventListener('click', () => {
       tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
       bodies.forEach((b) => (b.hidden = b.dataset.tab !== t.dataset.tab));
-      open();
       resizeCharts();
     }));
-    $('dock-toggle').addEventListener('click', () => {
-      const closed = dock.classList.toggle('collapsed');
-      document.body.classList.toggle('dock-closed', closed);
-      $('dock-toggle').textContent = closed ? '▴' : '▾';
-      $('dock-toggle').title = closed ? 'Show panel' : 'Hide panel';
-      resizeCharts();
-    });
-    $('dock-size').addEventListener('click', () => {
-      const tall = document.body.classList.toggle('dock-tall');
-      $('dock-size').textContent = tall ? '▾' : '▴';
-      $('dock-size').title = tall ? 'Lower panel' : 'Taller panel';
-      open();
-      resizeCharts();
-    });
     const left = $('panel-left');
     $('toggle-left').addEventListener('click', () => {
       const closed = left.classList.toggle('collapsed');
       $('toggle-left').textContent = closed ? '›' : '‹';
+      $('toggle-left').title = closed ? 'Show controls' : 'Hide controls';
       $('toggle-left').setAttribute('aria-expanded', String(!closed));
+      resizeCharts();
     });
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(rerenderCalendar, 200);
+    });
+    // Browsers may restore radio states on reload; the map mode always starts at "One month".
+    document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => (r.checked = r.value === mapMode));
     document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => r.addEventListener('change', () => {
       mapMode = r.value as 'month' | 'period';
       updateMapLayer();
@@ -1201,6 +1295,7 @@ import Base from '../layouts/Base.astro';
     for (let y = Math.floor(firstAbs / 12); y <= Math.floor(lastAbs / 12); y++) yearList.push([String(y), String(y)]);
     for (const s of [fromM, toM]) s.innerHTML = months;
     for (const s of [fromY, toY]) s.innerHTML = opts(yearList);
+    for (const s of [fromM, fromY, toM, toY]) s.disabled = false;
   }
 
   function setPeriodSelects(from: string, to: string) {
@@ -1287,6 +1382,7 @@ import Base from '../layouts/Base.astro';
     try {
       const t0 = performance.now();
       const shape = resolveShape(state.area);
+      areaMap?.show(country.code, country.bbox, shape); // move the map while the data loads
       const one = (dc: CountryData) => {
         const nc = monthCount(dc.cells.first_month, dc.model.last_complete_month);
         const hcc = harmonize(monthlyTotals(dc.cells, nc), dc.model);
@@ -1297,7 +1393,13 @@ import Base from '../layouts/Base.astro';
       let parts: { d: CountryData; hc: Harmonized; h: Harmonized }[] | undefined;
       if (country.code === WORLD_CODE) {
         // Every country harmonized with its own model, then summed.
-        const all = await Promise.all(countries.filter((c) => c.code !== WORLD_CODE).map((c) => loadCountry(c.code)));
+        const codes = countries.filter((c) => c.code !== WORLD_CODE).map((c) => c.code);
+        let done = 0;
+        const all = await Promise.all(codes.map((c) => loadCountry(c).then((x) => {
+          done++;
+          if (id === requestId) status.textContent = `Loading ${country.name}… ${done} of ${codes.length}`;
+          return x;
+        })));
         if (id !== requestId) return;
         parts = all.map(one);
         const model = worldModel(all.map((x) => x.model));
@@ -1362,7 +1464,30 @@ import Base from '../layouts/Base.astro';
     if (state.area.kind !== 'country') lastCustom = state.area;
     show().then(() => {
       if (p.error) status.textContent = `Part of the link was ignored: ${p.error}`;
+      prefetchCountries();
     });
+  }
+
+  let prefetched = false;
+  /** After the first view: load the other countries one by one while the browser is idle, so
+   * switching country (and "All countries") does not wait for the network. Skipped on data saver. */
+  function prefetchCountries() {
+    if (prefetched) return;
+    prefetched = true;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return;
+    const idle = (f: () => void) =>
+      'requestIdleCallback' in window ? requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 1000);
+    // smallest files first (country list order puts AU, the largest, near the front)
+    const order = ['PL', 'PT', 'GR', 'ES', 'CL', 'CA', 'UA', 'AU'];
+    const rank = (c: string) => (order.includes(c) ? order.indexOf(c) : order.length);
+    const codes = countries.map((c) => c.code).filter((c) => c !== WORLD_CODE).sort((a, b) => rank(a) - rank(b));
+    const next = () => {
+      const code = codes.shift();
+      if (!code) return;
+      loadCountry(code).catch(() => {}).finally(() => idle(next));
+    };
+    idle(next);
   }
 
   // ------------------------------------------------------------------ map (loaded after the first chart)
@@ -1395,10 +1520,14 @@ import Base from '../layouts/Base.astro';
       btnCancel.addEventListener('click', () => areaMap!.cancelDrawing());
       btnDraw.disabled = false;
       hint.textContent = 'Or pick an example / enter a rectangle.';
-      if (current) {
-        areaMap.show(current.country.code, current.country.bbox, resolveShape(state.area));
-        updateMapLayer();
+      const c = current?.country ?? countries.find((x) => x.code === state.code);
+      if (c) {
+        try {
+          areaMap.show(c.code, c.bbox, resolveShape(state.area));
+        } catch { /* invalid area in the link: show() reports it */ }
       }
+      areaMap.ensureView();
+      if (current) updateMapLayer();
     } catch (err) {
       console.error(err);
       $('map').hidden = true;

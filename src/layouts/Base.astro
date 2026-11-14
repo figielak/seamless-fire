@@ -5,6 +5,7 @@ interface Props {
 }
 const { title = 'Seamless Fire', app = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const onMethod = Astro.url.pathname.replace(/\/?$/, '/').endsWith('/method/');
 ---
 
 <!doctype html>
@@ -14,14 +15,15 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Harmonized MODIS + VIIRS burning activity calendar, 2000 to today." />
     <title>{title}</title>
+    {app && <link rel="preconnect" href="https://tiles.maps.eox.at" />}
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2300224e'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%23fee838'/%3E%3Crect x='9' y='9' width='4' height='4' fill='%23e8432e'/%3E%3C/svg%3E" />
   </head>
   <body class:list={{ 'is-app': app }}>
     <header class="site">
       <a class="brand" href={base}>Seamless Fire</a>
       <nav>
-        <a href={base}>Calendar</a>
-        <a href={`${base}method/`}>Method</a>
+        <a href={base} aria-current={onMethod ? undefined : 'page'}>Calendar</a>
+        <a href={`${base}method/`} aria-current={onMethod ? 'page' : undefined}>Method</a>
       </nav>
     </header>
     <main>
@@ -51,14 +53,10 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     --head: #00224e; /* cividis dark end */
     --header-h: 46px;
     --left-w: 320px;
-    --dock-h: 42vh;
   }
   body.is-app main {
     max-width: none;
     padding: 0;
-  }
-  body.is-app.dock-tall {
-    --dock-h: 72vh;
   }
   body.is-app header.site {
     height: var(--header-h);
@@ -80,17 +78,38 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     gap: 1.5rem;
     align-items: baseline;
     padding: 0.75rem 16px;
-    background: var(--card);
-    border-bottom: 1px solid var(--line);
+    background: var(--head);
+    color: #fff;
   }
   header.site .brand {
     font-weight: 700;
-    color: var(--text);
+    color: #fff;
     text-decoration: none;
   }
   header.site nav {
     display: flex;
-    gap: 1rem;
+    gap: 0.25rem;
+    align-self: stretch;
+  }
+  header.site nav a {
+    display: flex;
+    align-items: center;
+    padding: 0 0.6rem;
+    color: rgba(255, 255, 255, 0.78);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+  }
+  header.site nav a:hover {
+    color: #fff;
+  }
+  header.site nav a[aria-current='page'] {
+    color: #fff;
+    font-weight: 600;
+    border-bottom-color: var(--accent);
+  }
+  input[type='radio'],
+  input[type='checkbox'] {
+    accent-color: var(--head);
   }
   a {
     color: #0b5cad;

@@ -214,7 +214,7 @@ export class AreaMap {
   private cells = new CellCanvas();
   private legend: HTMLElement;
   private lookup: ((lat: number, lon: number) => number) | null = null;
-  private layerInfo = { title: '', unit: '', max: 0, empty: true };
+  private layerInfo: { title: string; unit: string; max: number; empty: boolean } | null = null;
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
     this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
@@ -226,7 +226,7 @@ export class AreaMap {
         maxZoom: 15, attribution: eox,
       }),
       L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/g/{z}/{y}/{x}.png', {
-        maxZoom: 15, attribution: `Labels ${osmAttr}`,
+        maxZoom: 15, attribution: `Labels ${osmAttr}`, className: 'labels-overlay',
       }),
     ]);
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: osmAttr });
@@ -245,6 +245,7 @@ export class AreaMap {
     const legendCtl = new Legend({ position: 'bottomleft' });
     legendCtl.addTo(this.map);
     this.legend = legendCtl.getContainer()!;
+    this.legend.hidden = true; // shown once the first layer arrives
     this.legend.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-smooth]');
       if (!btn) return;
@@ -256,7 +257,17 @@ export class AreaMap {
 
     this.map.on('click', (e: L.LeafletMouseEvent) => this.addPoint(e.latlng));
     this.map.on('dblclick', () => this.finish());
-    this.map.setView([50, 15], 4);
+    // No initial view here: the first show() fits the selected country, so no tiles are
+    // fetched for a view that is replaced right away. ensureView() is the fallback.
+  }
+
+  /** Default view when nothing has been shown yet (e.g. the country list failed). */
+  ensureView() {
+    try {
+      this.map.getCenter();
+    } catch {
+      this.map.setView([50, 15], 4);
+    }
   }
 
   /**
@@ -271,15 +282,19 @@ export class AreaMap {
   }
 
   private hover(ll: L.LatLng | null) {
+    if (!this.layerInfo) return;
+    this.legend.hidden = false;
     const { title, unit, max, empty } = this.layerInfo;
     const ticks = [1, 3, 10].filter((t) => t < max * 0.8);
     const ramp = Array.from({ length: 11 }, (_, i) => fireColor(i / 10)).join(',');
     let cell = 'Hover a cell for its value';
     if (ll && this.lookup) {
       const v = this.lookup(ll.lat, ll.lng);
-      const lat0 = Math.floor(ll.lat * 10 + 1e-9) / 10;
-      const lon0 = Math.floor(ll.lng * 10 + 1e-9) / 10;
-      cell = `Cell ${lat0.toFixed(1)}…${(lat0 + 0.1).toFixed(1)}°, ${lon0.toFixed(1)}…${(lon0 + 0.1).toFixed(1)}°: ` +
+      // cell centre, e.g. "23.35°S 2.95°W"
+      const lat = Math.floor(ll.lat * 10 + 1e-9) / 10 + 0.05;
+      const lon = Math.floor(ll.lng * 10 + 1e-9) / 10 + 0.05;
+      const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}°${v < 0 ? neg : pos}`;
+      cell = `Cell at ${deg(lat, 'N', 'S')} ${deg(lon, 'E', 'W')}: ` +
         `<b>${v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
     }
     this.legend.innerHTML = `<div class="lg-title">${title}</div>
@@ -287,7 +302,7 @@ export class AreaMap {
         <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
           `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
           <span style="left:100%">${max}+</span></div>
-        <div class="lg-unit">${unit}; same scale for all countries</div>
+        <div class="lg-unit">${unit}. Same scale for all countries.</div>
         <div class="lg-mode">${[['1', 'Smooth'], ['0', 'Cells']].map(([v, label]) =>
           `<button type="button" data-smooth="${v}" aria-pressed="${(v === '1') === this.cells.smooth}">${label}</button>`).join('')}
           <span>${this.cells.smooth ? 'colours blended between cell centres' : 'one square per 0.1° cell'}</span></div>
