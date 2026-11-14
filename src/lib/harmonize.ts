@@ -1,6 +1,6 @@
 // Harmonization in the browser: sum raw cell-days first, then apply the model.
-// Port of pipeline/model.py:harmonized_monthly. Pure functions (no import.meta.env),
-// so the same code runs in Node tests and later for custom areas (stage 5).
+// Port of pipeline/model.py:harmonized_monthly (country) and pipeline/area.py:area_series
+// (custom area). Pure functions (no import.meta.env), so the same code runs in Node tests.
 
 export interface Cells {
   first_month: string; // "YYYY-MM", month index 0
@@ -37,6 +37,11 @@ export interface Model {
   coverage?: Record<string, [string, string]>; // satellite -> [first, last] date in the raw files
   hotspots?: boolean; // {CC}/hotspots/{year}.csv exist (not for AU, CA)
   hotspot_sensors?: Record<string, string[]>; // year -> satellites present in the hotspot files
+  area: {
+    h_month: number; // log1p half-width of the ~80% interval for custom areas (monthly)
+    h_annual: number; // the same for annual sums
+    [key: string]: unknown;
+  };
   annual: {
     years: number[];
     harmonized: number[];
@@ -66,6 +71,7 @@ export interface Harmonized {
   terraOnly: boolean[];
   lowQuality: boolean[];
   preliminary: boolean[];
+  area: boolean; // custom area (country share before VIIRS), not the whole country
 }
 
 // Calendar month (1..12) -> season index: DJF=0, MAM=1, JJA=2, SON=3
@@ -140,6 +146,7 @@ export function harmonize(s: Series, model: Model): Harmonized {
     terraOnly: new Array(n),
     lowQuality: new Array(n),
     preliminary: new Array(n),
+    area: false,
   };
   for (let i = 0; i < n; i++) {
     const abs = first + i;
@@ -165,4 +172,113 @@ export function harmonize(s: Series, model: Model): Harmonized {
     out.preliminary[i] = prelim.has(ym);
   }
   return out;
+}
+
+/**
+ * Custom area: estimated months = country share (country value × area MODIS / country MODIS,
+ * 0 when the country has no MODIS), observed months = the area's VIIRS. Interval in log1p
+ * space with the half-width from the block validation (model.area), so 0 keeps an upper bound.
+ */
+export function harmonizeArea(area: Series, country: Harmonized, model: Model): Harmonized {
+  const n = country.value.length;
+  if (area.modis.length !== n) throw new Error('area and country series differ in length');
+  const h = model.area.h_month;
+  const hTerra = Math.hypot(h, model.interval_z * model.b * model.terra_only.sigma);
+  const out: Harmonized = {
+    ...country,
+    value: new Float64Array(n),
+    lo: new Float64Array(n),
+    hi: new Float64Array(n),
+    modis: area.modis,
+    viirs: area.viirs,
+    viirsDet: area.viirsDet,
+    area: true,
+  };
+  if (!area.viirsDet) delete out.viirsDet;
+  for (let i = 0; i < n; i++) {
+    if (country.estimated[i]) {
+      const mc = country.modis[i];
+      const v = mc > 0 ? (country.value[i] * area.modis[i]) / mc : 0;
+      const hw = country.terraOnly[i] ? hTerra : h;
+      out.value[i] = v;
+      out.lo[i] = Math.max(Math.expm1(Math.log1p(v) - hw), 0);
+      out.hi[i] = Math.expm1(Math.log1p(v) + hw);
+    } else {
+      out.value[i] = out.lo[i] = out.hi[i] = area.viirs[i];
+    }
+  }
+  return out;
+}
+
+export interface YearTotal {
+  year: number;
+  value: number;
+  lo: number;
+  hi: number;
+  estimated: boolean; // every month of the year (in range) estimated
+  months: number; // months in the range
+  partial: boolean; // fewer than 12 months (data coverage or the selected range)
+}
+
+/**
+ * Annual sums over months [fromIdx, toIdx]. Port of model.py:annual_series: a fully estimated
+ * year gets the annual interval (country: sigma_annual, area: h_annual in log1p space);
+ * a mixed year (2012) = observed sum + monthly intervals of its estimated months.
+ */
+export function annualTotals(h: Harmonized, model: Model, fromIdx = 0, toIdx = h.value.length - 1): YearTotal[] {
+  const first = monthAbs(h.firstMonth);
+  const z = model.interval_z;
+  const terraS = model.b * model.terra_only.sigma;
+  const out: YearTotal[] = [];
+  let cur: (YearTotal & { obs: number; estLo: number; estHi: number; terra: boolean }) | null = null;
+  const flush = () => {
+    if (!cur) return;
+    if (cur.estimated) {
+      if (h.area) {
+        const hw = cur.terra ? Math.hypot(model.area.h_annual, z * terraS) : model.area.h_annual;
+        cur.lo = Math.max(Math.expm1(Math.log1p(cur.value) - hw), 0);
+        cur.hi = Math.expm1(Math.log1p(cur.value) + hw);
+      } else {
+        const k = Math.exp(z * (cur.terra ? Math.hypot(model.sigma_annual, terraS) : model.sigma_annual));
+        cur.lo = cur.value / k;
+        cur.hi = cur.value * k;
+      }
+    } else {
+      cur.lo = cur.obs + cur.estLo;
+      cur.hi = cur.obs + cur.estHi;
+    }
+    const { year, value, lo, hi, estimated, months } = cur;
+    out.push({ year, value, lo, hi, estimated, months, partial: months < 12 });
+  };
+  for (let i = Math.max(fromIdx, 0); i <= Math.min(toIdx, h.value.length - 1); i++) {
+    const year = Math.floor((first + i) / 12);
+    if (!cur || cur.year !== year) {
+      flush();
+      cur = { year, value: 0, lo: 0, hi: 0, estimated: true, months: 0, partial: false, obs: 0, estLo: 0, estHi: 0, terra: false };
+    }
+    const v = h.value[i];
+    cur.value += v;
+    cur.months++;
+    cur.terra ||= h.terraOnly[i];
+    if (h.estimated[i]) {
+      cur.estLo += h.lo[i];
+      cur.estHi += h.hi[i];
+    } else {
+      cur.estimated = false;
+      cur.obs += v;
+    }
+  }
+  flush();
+  return out;
+}
+
+/** First and last month (absolute) of the raw files of the given satellites; null = unknown. */
+export function coverageSpan(model: Model, sats: string[]): [number, number] | null {
+  const cov = model.coverage ?? {};
+  const c = sats.map((s) => cov[s]).filter(Boolean);
+  if (!c.length) return null;
+  return [
+    Math.min(...c.map((x) => monthAbs(x[0].slice(0, 7)))),
+    Math.max(...c.map((x) => monthAbs(x[1].slice(0, 7)))),
+  ];
 }

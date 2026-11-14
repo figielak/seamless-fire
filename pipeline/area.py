@@ -222,3 +222,21 @@ def area_validation(code: str, cd: pd.DataFrame, frame: pd.DataFrame, fit_frame:
             }
     return out
 
+
+
+# ---------------------------------------------------------------- site reference (fixture)
+
+def area_series(hm: pd.DataFrame, area_modis: np.ndarray, area_viirs: np.ndarray, model: dict) -> dict:
+    """Monthly custom-area series as the site computes it (src/lib/harmonize.ts:harmonizeArea).
+    hm = model.harmonized_monthly of the country (raw MODIS in column `modis`)."""
+    from config import INTERVAL_Z
+    est = hm["estimated"].to_numpy(bool)
+    m_c = hm["modis"].to_numpy(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share = np.where(m_c > 0, hm["harmonized"].to_numpy(float) * area_modis / m_c, 0.0)
+    v = np.where(est, share, area_viirs)
+    h_t = np.hypot(model["area"]["h_month"], INTERVAL_Z * model["b"] * model["terra_only"]["sigma"])
+    h = np.where(hm["terra_only"].to_numpy(bool), h_t, model["area"]["h_month"])
+    lo = np.where(est, np.maximum(np.expm1(np.log1p(v) - h), 0), v)
+    hi = np.where(est, np.expm1(np.log1p(v) + h), v)
+    return {"value": v, "lo": lo, "hi": hi}

@@ -12,14 +12,20 @@ import sys
 import numpy as np
 import pandas as pd
 
+from area import area_series, in_area, load_presets
 from config import COUNTRIES, OUT_DIR, ROOT
 from model import harmonized_monthly
 
 FIXTURE_DIR = ROOT / "src" / "lib" / "fixtures"
 
 
-def country_series(code: str) -> tuple[pd.DataFrame, dict]:
+def country_series(code: str, area: dict | None = None) -> tuple[pd.DataFrame, dict]:
     cells = json.loads((OUT_DIR / code / "cells.json").read_text(encoding="utf-8"))
+    if area is not None:  # keep only cells whose center is inside the area
+        d = cells["cell_deg"]
+        inside = in_area((np.asarray(cells["lon"]) + 0.5) * d, (np.asarray(cells["lat"]) + 0.5) * d, area)
+        cells = {**cells, **{k: np.asarray(cells[k])[inside] for k in
+                             ("lat", "lon", "m", "modis", "viirs", "viirs_det") if k in cells}}
     model = json.loads((OUT_DIR / code / "model.json").read_text(encoding="utf-8"))
     months = pd.period_range(cells["first_month"], model["last_complete_month"], freq="M")
     m = np.asarray(cells["m"])
@@ -36,6 +42,13 @@ def country_series(code: str) -> tuple[pd.DataFrame, dict]:
 def build(code: str) -> dict:
     ms, model = country_series(code)
     hm = harmonized_monthly(ms, model["a"], model["b"], model["terra_only"])
+    areas = {}
+    for pr in load_presets():
+        if pr["country"] != code:
+            continue
+        am, _ = country_series(code, pr)
+        r = area_series(hm, am["MODIS"].to_numpy(float), am["SNPP"].to_numpy(float), model)
+        areas[pr["id"]] = {k: [float(x) for x in v] for k, v in r.items()}
     return {
         "first_month": str(ms.index[0]),
         "modis": ms["MODIS"].astype(int).tolist(),
@@ -44,6 +57,7 @@ def build(code: str) -> dict:
         "estimated": hm["estimated"].astype(int).tolist(),
         "terra_only": hm["terra_only"].astype(int).tolist(),
         **({"viirs_det": ms["DET"].astype(int).tolist()} if "DET" in ms else {}),
+        **({"areas": areas} if areas else {}),
     }
 
 

@@ -26,7 +26,7 @@ function series(
     prelim.includes(`${2000 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`));
   return {
     firstMonth: '2000-01', value, lo: value, hi: value, modis: z, viirs: z,
-    estimated: no, terraOnly: no, lowQuality, preliminary,
+    estimated: no, terraOnly: no, lowQuality, preliminary, area: false,
   };
 }
 

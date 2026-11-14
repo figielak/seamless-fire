@@ -110,3 +110,25 @@ export function monthStats(h: Harmonized, idx: number): MonthStats {
     nAll: all.length,
   };
 }
+
+export interface Anomaly extends MonthStats {
+  idx: number;
+  estimated: boolean;
+  lowQuality: boolean;
+  preliminary: boolean;
+}
+
+/**
+ * Months in [fromIdx, toIdx] with the highest anomaly ratio. Statistics always use the full
+ * history (the range only limits which months are ranked). Months without enough history skip.
+ */
+export function topAnomalies(h: Harmonized, fromIdx = 0, toIdx = h.value.length - 1, n = 10): Anomaly[] {
+  const out: Anomaly[] = [];
+  for (let i = Math.max(fromIdx, 0); i <= Math.min(toIdx, h.value.length - 1); i++) {
+    const s = monthStats(h, i);
+    if (s.ratio === null) continue;
+    out.push({ ...s, idx: i, estimated: h.estimated[i], lowQuality: h.lowQuality[i], preliminary: h.preliminary[i] });
+  }
+  out.sort((a, b) => b.ratio! - a.ratio! || b.value - a.value);
+  return out.slice(0, n);
+}
