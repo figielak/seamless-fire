@@ -16,6 +16,8 @@ Updated: 2026-11-14
   then summed; hotspot export stays per country; live cold first load ~7 s. Map colours: one fixed scale for all countries.
 - Map rendering (`src/lib/map.ts`): default "Smooth" (bilinear between cell centres, ~20 ms/redraw), legend toggle
   "Smooth / Cells"; falls back to squares when a cell is < 3 px on screen. Live (95eddff).
+- Polish pass 2026-11-14: map opacity ramp, compact legend, segmented controls, calendar toggle
+  "Cell-days | vs typical", hotspot points on the map in "One month" mode (click = details).
 - Raw toggle: `rawSplice`/`rawRatio` in `src/lib/harmonize.ts`, link `v=raw`; changes calendar + per-year only.
 - Method page `src/pages/method.astro`: tables built from `public/data/{CC}/model.json` at build time,
   before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.

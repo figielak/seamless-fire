@@ -16,6 +16,20 @@ const DRAFT_STYLE: L.PathOptions = { color: '#e8432e', weight: 2, dashArray: '4 
 const toLatLngs = (ring: LonLat[]) => ring.map(([lon, lat]) => L.latLng(lat, lon));
 const bounds = (b: BBox) => L.latLngBounds([b[1], b[0]], [b[3], b[2]]);
 
+/** One filtered hotspot detection (row of public/data/{CC}/hotspots/{year}.csv). */
+export interface Hotspot {
+  date: string;
+  time: string; // HHMM, UTC
+  lat: number;
+  lon: number;
+  sensor: string; // Terra, Aqua, SNPP, N20
+  frp: number; // fire radiative power, MW
+}
+
+const SENSOR_NAME: Record<string, string> = {
+  Terra: 'MODIS Terra (1 km)', Aqua: 'MODIS Aqua (1 km)', SNPP: 'VIIRS S-NPP (375 m)', N20: 'VIIRS NOAA-20 (375 m)',
+};
+
 export interface AreaMapOptions {
   onPolygon: (ring: LonLat[]) => void; // a finished, valid polygon
   onDrawState: (drawing: boolean, points: number) => void;
@@ -36,6 +50,16 @@ export function fireColor(t: number): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/**
+ * Opacity for a colour position t: very low values fade out so the base map stays readable and
+ * the eye goes to the active cells (t ≈ 0.12 is about 0.5 cell-days on the 0–30 scale).
+ */
+export function fireAlpha(t: number): number {
+  const t0 = 0.06;
+  if (t <= t0) return 0;
+  return Math.min(0.4 + 0.55 * ((t - t0) / 0.45), 0.95);
+}
+
 /** Log colour position of a value: log1p(v) / log1p(max). */
 export const fireT = (v: number, max: number) => (max > 0 ? Math.log1p(v) / Math.log1p(max) : 0);
 
@@ -47,6 +71,11 @@ const FIRE_LUT: Uint8Array = (() => {
     lut.set([r, g, b], i * 3);
   }
   return lut;
+})();
+const ALPHA_LUT: Float32Array = (() => {
+  const a = new Float32Array(LUT_SIZE);
+  for (let i = 0; i < LUT_SIZE; i++) a[i] = fireAlpha(i / (LUT_SIZE - 1));
+  return a;
 })();
 
 /** Smooth rendering needs cells at least this many screen pixels wide; below it, rectangles. */
@@ -73,7 +102,8 @@ class CellCanvas extends L.Layer {
     if (data && data.value.length) {
       let [la0, la1, lo0, lo1] = [Infinity, -Infinity, Infinity, -Infinity];
       for (let j = 0; j < data.value.length; j++) {
-        this.colors.push(fireColor(fireT(data.value[j], max)));
+        const t = fireT(data.value[j], max);
+        this.colors.push(fireColor(t).replace('rgb(', 'rgba(').replace(')', `,${fireAlpha(t).toFixed(3)})`));
         la0 = Math.min(la0, data.lat[j]); la1 = Math.max(la1, data.lat[j]);
         lo0 = Math.min(lo0, data.lon[j]); lo1 = Math.max(lo1, data.lon[j]);
       }
@@ -97,7 +127,6 @@ class CellCanvas extends L.Layer {
   onAdd(map: L.Map) {
     this.canvas.style.position = 'absolute';
     this.canvas.style.pointerEvents = 'none';
-    this.canvas.style.opacity = '0.85';
     map.getPanes().overlayPane.appendChild(this.canvas);
     map.on('moveend zoomend resize viewreset', this.redraw, this);
     map.on('zoomstart', this.hide, this);
@@ -191,12 +220,15 @@ class CellCanvas extends L.Layer {
         if (cc) { wm += wc; tq += wc * cc; }
         if (dd) { wm += wd; tq += wd * dd; }
         if (wm <= 0) continue;
-        const li = Math.round(((tq / wm - 1) / 254) * (LUT_SIZE - 1)) * 3;
+        const lj = Math.round(((tq / wm - 1) / 254) * (LUT_SIZE - 1));
+        const alpha = ALPHA_LUT[lj];
+        if (alpha <= 0) continue;
+        const li = lj * 3;
         const o = (y * W + x) * 4;
         px[o] = FIRE_LUT[li];
         px[o + 1] = FIRE_LUT[li + 1];
         px[o + 2] = FIRE_LUT[li + 2];
-        px[o + 3] = Math.round(Math.min(wm * 1.6, 1) * 255);
+        px[o + 3] = Math.round(Math.min(wm * 1.6, 1) * alpha * 255);
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -215,6 +247,9 @@ export class AreaMap {
   private legend: HTMLElement;
   private lookup: ((lat: number, lon: number) => number) | null = null;
   private layerInfo: { title: string; unit: string; max: number; empty: boolean } | null = null;
+  private hotRenderer = L.canvas({ padding: 0.3 });
+  private hotLayer = L.layerGroup();
+  private hotNote = '';
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
     this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
@@ -232,8 +267,13 @@ export class AreaMap {
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: osmAttr });
     satellite.addTo(this.map);
     this.cells.addTo(this.map);
-    L.control.layers({ Satellite: satellite, 'Street map': osm }, { 'Fire cells': this.cells }, { position: 'topright' })
-      .addTo(this.map);
+    this.hotLayer.addTo(this.map);
+    L.control.layers(
+      { Satellite: satellite, 'Street map': osm },
+      { 'Fire cells': this.cells, 'Hotspot points': this.hotLayer },
+      { position: 'topright' },
+    ).addTo(this.map);
+    this.map.on('zoomend', () => this.styleHotspots());
 
     const Legend = L.Control.extend({
       onAdd: () => {
@@ -246,12 +286,6 @@ export class AreaMap {
     legendCtl.addTo(this.map);
     this.legend = legendCtl.getContainer()!;
     this.legend.hidden = true; // shown once the first layer arrives
-    this.legend.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-smooth]');
-      if (!btn) return;
-      this.cells.setSmooth(btn.dataset.smooth === '1');
-      this.hover(null);
-    });
     this.map.on('mousemove', (e: L.LeafletMouseEvent) => this.hover(e.latlng));
     this.map.on('mouseout', () => this.hover(null));
 
@@ -281,31 +315,68 @@ export class AreaMap {
     this.hover(null);
   }
 
+  /**
+   * Hotspot detections as points (null = none). `note` is the legend line, e.g. the count or why
+   * points are missing.
+   */
+  setHotspots(points: Hotspot[] | null, note: string) {
+    this.hotLayer.clearLayers();
+    this.hotNote = note;
+    for (const p of points ?? []) {
+      const sensor = SENSOR_NAME[p.sensor] ?? p.sensor;
+      L.circleMarker([p.lat, p.lon], { renderer: this.hotRenderer, ...this.hotStyle() })
+        .bindPopup(`<b>${p.date}</b>, ${p.time.slice(0, 2)}:${p.time.slice(2)} UTC<br>${sensor}<br>` +
+          `FRP ${p.frp.toFixed(1)} MW<br>${p.lat.toFixed(4)}°, ${p.lon.toFixed(4)}°`)
+        .addTo(this.hotLayer);
+    }
+    this.hover(null);
+  }
+
+  private hotStyle(): L.CircleMarkerOptions {
+    const z = this.map.getZoom?.() ?? 6;
+    return {
+      radius: z >= 10 ? 5 : z >= 8 ? 3.5 : 2.2,
+      color: '#0b1a2b', weight: z >= 8 ? 1.2 : 0.8, fillColor: '#ffffff', fillOpacity: 0.95,
+    };
+  }
+
+  private styleHotspots() {
+    const st = this.hotStyle();
+    this.hotLayer.eachLayer((l) => (l as L.CircleMarker).setStyle(st).setRadius(st.radius!));
+  }
+
+  /** "Smooth" (blended between cell centres) or "Cells" (one square per 0.1° cell). */
+  setSmooth(on: boolean) {
+    this.cells.setSmooth(on);
+  }
+
   private hover(ll: L.LatLng | null) {
     if (!this.layerInfo) return;
     this.legend.hidden = false;
     const { title, unit, max, empty } = this.layerInfo;
     const ticks = [1, 3, 10].filter((t) => t < max * 0.8);
-    const ramp = Array.from({ length: 11 }, (_, i) => fireColor(i / 10)).join(',');
-    let cell = 'Hover a cell for its value';
+    const ramp = Array.from({ length: 11 }, (_, i) => {
+      const c = fireColor(i / 10);
+      return c.replace('rgb(', 'rgba(').replace(')', `,${Math.max(fireAlpha(i / 10), 0.12).toFixed(2)})`);
+    }).join(',');
+    let cell = 'Hover the map for a cell value';
     if (ll && this.lookup) {
       const v = this.lookup(ll.lat, ll.lng);
       // cell centre, e.g. "23.35°S 2.95°W"
       const lat = Math.floor(ll.lat * 10 + 1e-9) / 10 + 0.05;
       const lon = Math.floor(ll.lng * 10 + 1e-9) / 10 + 0.05;
       const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}°${v < 0 ? neg : pos}`;
-      cell = `Cell at ${deg(lat, 'N', 'S')} ${deg(lon, 'E', 'W')}: ` +
+      cell = `${deg(lat, 'N', 'S')} ${deg(lon, 'E', 'W')}: ` +
         `<b>${v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1)}</b>`;
     }
     this.legend.innerHTML = `<div class="lg-title">${title}</div>
-        <div class="lg-bar" style="background:linear-gradient(90deg,${ramp})"></div>
+        <div class="lg-bar" style="background-image:linear-gradient(90deg,${ramp})"></div>
         <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
           `<span style="left:${(fireT(t, max) * 100).toFixed(1)}%">${t}</span>`).join('')}
           <span style="left:100%">${max}+</span></div>
-        <div class="lg-unit">${unit}.</div>
-        <div class="lg-mode">${[['1', 'Smooth'], ['0', 'Cells']].map(([v, label]) =>
-          `<button type="button" data-smooth="${v}" aria-pressed="${(v === '1') === this.cells.smooth}">${label}</button>`).join('')}
-          <span>${this.cells.smooth ? 'colours blended between cell centres' : 'one square per 0.1° cell'}</span></div>
+        <div class="lg-unit">${unit}</div>
+        ${this.hotNote && this.map.hasLayer(this.hotLayer)
+          ? `<div class="lg-hot"><span class="lg-dot"></span>${this.hotNote}</div>` : ''}
         <div class="lg-cell">${empty ? 'No fire cells in this selection' : cell}</div>`;
   }
 
@@ -313,7 +384,7 @@ export class AreaMap {
   show(code: string, countryBBox: BBox, shape: Shape | null) {
     this.countryLayer?.remove();
     this.countryLayer = null;
-    if (code !== 'ALL') { // no frame around the whole world
+    if (code !== 'ALL' && shape) { // frame only as context for a custom area
       this.countryLayer = L.rectangle(bounds(countryBBox), {
         color: '#57606a', weight: 1, fill: false, dashArray: '2 4', interactive: false,
       }).addTo(this.map);

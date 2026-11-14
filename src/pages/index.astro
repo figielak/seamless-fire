@@ -21,10 +21,10 @@ import Base from '../layouts/Base.astro';
             <select id="country" disabled aria-label="Country"><option>Loading…</option></select>
           </div>
           <span id="status" class="status" role="status"></span>
-          <fieldset class="row">
+          <fieldset class="seg">
             <legend class="sr-only">Area</legend>
-            <label class="radio"><input type="radio" name="mode" value="country" checked /> <span id="whole-label">Whole country</span></label>
-            <label class="radio"><input type="radio" name="mode" value="custom" /> Custom area</label>
+            <label><input type="radio" name="mode" value="country" checked /><span id="whole-label">Whole country</span></label>
+            <label><input type="radio" name="mode" value="custom" /><span>Custom area</span></label>
           </fieldset>
           <div id="custom" class="custom" hidden>
             <div class="row">
@@ -44,7 +44,7 @@ import Base from '../layouts/Base.astro';
             <p id="area-note" class="note"></p>
           </div>
           <div class="row map-tools">
-            <button type="button" id="draw">Draw polygon on map</button>
+            <button type="button" id="draw" class="wide">✎ Draw an area on the map</button>
             <button type="button" id="draw-finish" hidden>Finish</button>
             <button type="button" id="draw-undo" hidden>Undo point</button>
             <button type="button" id="draw-cancel" hidden>Cancel</button>
@@ -53,12 +53,11 @@ import Base from '../layouts/Base.astro';
         </details>
 
         <details open class="sec">
-          <summary>Period</summary>
+          <summary>Period <button type="button" id="full-period" class="linkbtn">Full period</button></summary>
           <div class="row period">
             <label><span>From</span><select id="from-m" class="small" aria-label="From month" disabled><option>…</option></select><select id="from-y" class="small" aria-label="From year" disabled><option>…</option></select></label>
             <label><span>To</span><select id="to-m" class="small" aria-label="To month" disabled><option>…</option></select><select id="to-y" class="small" aria-label="To year" disabled><option>…</option></select></label>
           </div>
-          <button type="button" id="full-period">Full period</button>
         </details>
 
         <details open class="sec">
@@ -72,17 +71,23 @@ import Base from '../layouts/Base.astro';
 
         <details open class="sec">
           <summary>Map layer</summary>
-          <div class="row">
-            <label class="radio"><input type="radio" name="mapmode" value="month" checked autocomplete="off" /> One month</label>
-            <label class="radio"><input type="radio" name="mapmode" value="period" autocomplete="off" /> Whole period</label>
-          </div>
-          <div class="row month-step">
+          <fieldset class="seg">
+            <legend class="sr-only">Map shows</legend>
+            <label><input type="radio" name="mapmode" value="month" checked autocomplete="off" /><span>One month</span></label>
+            <label><input type="radio" name="mapmode" value="period" autocomplete="off" /><span>Whole period</span></label>
+          </fieldset>
+          <div class="row month-step" id="month-step">
             <button type="button" id="map-prev" class="icon" title="Previous month">‹</button>
             <span id="map-month" class="map-month">—</span>
             <button type="button" id="map-next" class="icon" title="Next month">›</button>
           </div>
-          <p class="note">Click a month in the calendar to show it on the map. Each cell gets its share of
-            the harmonized value, so the cells of an area add up to its calendar value.</p>
+          <label class="check"><input type="checkbox" id="show-hot" checked autocomplete="off" /> Hotspot points (one month)</label>
+          <div class="sub-row"><span class="sub-lbl">Rendering</span>
+          <div class="view-toggle small-toggle" role="group" aria-label="Map rendering">
+            <button type="button" data-smooth="1" aria-pressed="true" title="Colours blended between cell centres">Smooth</button>
+            <button type="button" data-smooth="0" aria-pressed="false" title="One square per 0.1° cell">Cells</button>
+          </div></div>
+          <p class="note">Tip: click a calendar month or an anomaly row to map it.</p>
         </details>
 
         <details class="sec">
@@ -116,7 +121,13 @@ import Base from '../layouts/Base.astro';
       </div>
       <div class="dock-body">
         <div class="tab" data-tab="calendar">
-          <p class="unit"><span id="calendar-unit">fire cell-days per month, VIIRS S-NPP scale</span>. Click a month to map it.</p>
+          <div class="cal-head">
+            <p class="unit"><span id="calendar-unit">fire cell-days per month, VIIRS S-NPP scale</span>. Click a month to map it.</p>
+            <div class="view-toggle small-toggle cal-toggle" role="group" aria-label="Calendar colours">
+              <button type="button" data-cal="value" aria-pressed="true" title="Colour = number of fire cell-days">Cell-days</button>
+              <button type="button" data-cal="anom" aria-pressed="false" title="Colour = month compared with its typical level">vs typical</button>
+            </div>
+          </div>
           <div id="calendar" class="calendar"></div>
           <p class="note" id="calendar-note"></p>
         </div>
@@ -150,8 +161,11 @@ import Base from '../layouts/Base.astro';
               certain than whole countries.
             </li>
             <li>
-              <b>Map</b>: each cell shows its share of the harmonized value, by the same rule. Estimated
-              months spread the country value over cells by their MODIS cell-days.
+              <b>Map</b>: each cell shows its share of the harmonized value, by the same rule, so the cells
+              of an area add up to its calendar value. Estimated months spread the country value over cells
+              by their MODIS cell-days. Colours use one log scale for all countries; cells below about
+              0.5 cell-days fade out. <i>Smooth</i> blends colours between cell centres, <i>Cells</i> shows
+              one square per 0.1° cell.
             </li>
             <li>
               Marked months have known sensor problems: early Terra data (Jan–Oct 2000), Aqua failure
@@ -232,15 +246,18 @@ import Base from '../layouts/Base.astro';
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.45rem 0.6rem 0.45rem 0.9rem;
-    background: var(--head);
-    color: #fff;
+    background: #eef2f7;
+    color: var(--head);
+    border-bottom: 1px solid var(--line);
     border-radius: 8px 8px 0 0;
   }
   .left.collapsed .panel-head {
     border-radius: 8px;
   }
   .panel-head h1 {
-    font-size: 1.1rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     margin: 0;
   }
   .panel-body {
@@ -257,11 +274,121 @@ import Base from '../layouts/Base.astro';
     border-top: 1px solid var(--line);
     padding: 0.5rem 0 0.3rem;
   }
+  .sec {
+    padding: 0.65rem 0 0.55rem;
+  }
   .sec summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    list-style: none;
+    font-size: 0.78rem;
     font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     cursor: pointer;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.5rem;
     color: var(--head);
+  }
+  .sec summary::-webkit-details-marker {
+    display: none;
+  }
+  .sec summary::before {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.15s;
+    margin-right: 0.15rem;
+  }
+  .sec[open] summary::before {
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+  .sec:not([open]) summary {
+    margin-bottom: 0;
+  }
+  .linkbtn {
+    margin-left: auto;
+    border: 0;
+    padding: 0;
+    background: none;
+    color: #0b5cad;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .linkbtn:hover {
+    text-decoration: underline;
+  }
+  .sec:not([open]) .linkbtn {
+    display: none;
+  }
+  .seg {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    padding: 0;
+    margin: 0 0 0.5rem;
+  }
+  .seg label {
+    position: relative;
+    text-align: center;
+    cursor: pointer;
+  }
+  .seg label + label {
+    border-left: 1px solid var(--line);
+  }
+  .seg input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .seg span {
+    display: block;
+    padding: 0.3rem 0.4rem;
+  }
+  .seg label:hover span {
+    background: #f3f6f9;
+  }
+  .seg input:checked + span {
+    background: var(--head);
+    color: #fff;
+  }
+  .seg input:focus-visible + span {
+    outline: 2px solid var(--head);
+    outline-offset: -3px;
+  }
+  .sub-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.1rem 0 0.2rem;
+  }
+  .sub-lbl {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .sub-row .view-toggle {
+    flex: 1;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.45rem;
+    font-size: 0.92rem;
+  }
+  button.wide {
+    width: 100%;
+  }
+  .panel-body .note:empty {
+    display: none;
   }
   .row {
     display: flex;
@@ -345,6 +472,15 @@ import Base from '../layouts/Base.astro';
   .month-step {
     flex-wrap: nowrap;
   }
+  .month-step[hidden] {
+    display: none;
+  }
+  .small-toggle {
+    font-size: 0.88rem;
+  }
+  .small-toggle button {
+    padding: 0.15rem 0.6rem;
+  }
   .map-month {
     flex: 1;
     text-align: center;
@@ -389,7 +525,7 @@ import Base from '../layouts/Base.astro';
     white-space: nowrap;
   }
   .dock-tabs [role='tab'][aria-selected='true'] {
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--head);
     font-weight: 700;
   }
   .skel {
@@ -427,6 +563,17 @@ import Base from '../layouts/Base.astro';
     color: var(--muted);
     font-size: 0.85rem;
     margin: 0.2rem 0;
+  }
+  .cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem 1rem;
+    flex-wrap: wrap;
+  }
+  .cal-toggle {
+    width: auto;
+    flex: 0 0 auto;
   }
   .annual {
     width: 100%;
@@ -525,15 +672,48 @@ import Base from '../layouts/Base.astro';
   }
   table.anom th,
   table.anom td {
-    padding: 0.3rem 0.5rem;
-    border-bottom: 1px solid var(--line);
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid #eaeef2;
     text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.anom th {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom-color: var(--line);
+  }
+  table.anom td:first-child {
+    color: var(--muted);
   }
   table.anom th:nth-child(2),
   table.anom td:nth-child(2),
-  table.anom td:last-child,
-  table.anom th:last-child {
+  table.anom td.flags,
+  table.anom th:nth-child(7) {
     text-align: left;
+  }
+  table.anom td:nth-child(2) {
+    font-weight: 600;
+  }
+  table.anom td.flags {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  table.anom td.bar-cell {
+    position: relative;
+    min-width: 7rem;
+  }
+  table.anom td.bar-cell .bar {
+    position: absolute;
+    right: 0.6rem;
+    top: 22%;
+    bottom: 22%;
+    max-width: calc(100% - 1.2rem);
+    border-radius: 3px;
+    background: rgba(221, 81, 58, 0.16);
+  }
+  table.anom td.bar-cell b {
+    position: relative;
   }
   .table-wrap {
     overflow-x: auto;
@@ -546,15 +726,14 @@ import Base from '../layouts/Base.astro';
     line-height: 1.3;
   }
   .panel-head button.icon {
-    background: transparent;
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--card);
+    color: var(--head);
   }
   table.anom tbody tr {
     cursor: pointer;
   }
   table.anom tbody tr:hover {
-    background: #f1f3f5;
+    background: #f3f6f9;
   }
   /* "Now" strip injected by renderNow(): one row of key figures above the map and charts. */
   section.now h2 {
@@ -573,18 +752,24 @@ import Base from '../layouts/Base.astro';
   }
   section.now .now-month .flag {
     display: inline-block;
-    margin: 0 0 0 0.3rem;
-    padding: 0 0.4rem;
-    border-radius: 4px;
-    background: #fdecea;
-    font-size: 0.75rem;
+    margin: 0 0 0 0.4rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: #fff4d6;
+    color: #7a5200;
+    font-size: 0.72rem;
     font-weight: 600;
     vertical-align: 0.15em;
+  }
+  section.now .now-head {
+    padding-right: 1.4rem;
+    border-right: 1px solid var(--line);
   }
   section.now .now-fig {
     display: flex;
     flex-direction: column;
     line-height: 1.15;
+    align-self: center;
   }
   section.now .now-fig b {
     font-size: 1.75rem;
@@ -602,9 +787,9 @@ import Base from '../layouts/Base.astro';
   }
   section.now dl {
     display: flex;
-    gap: 0.3rem 1.2rem;
+    gap: 0.3rem 1.6rem;
     flex-wrap: wrap;
-    margin: 0;
+    margin: 0 0 0 auto;
     padding-left: 1.4rem;
     border-left: 1px solid var(--line);
     font-size: 0.82rem;
@@ -612,26 +797,30 @@ import Base from '../layouts/Base.astro';
   section.now dl div {
     display: flex;
     flex-direction: column-reverse;
+    align-items: flex-start;
+    line-height: 1.15;
   }
   section.now dt {
     color: var(--muted);
+    text-align: left;
   }
   section.now dd {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 1.3rem;
     font-weight: 700;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
   }
   section.now .now-note {
-    flex: 1 1 14rem;
-    font-size: 0.78rem;
-    margin: 0;
-    text-align: right;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin: 0.1rem 0 0;
   }
   .map-legend {
     background: rgba(255, 255, 255, 0.93);
     border-radius: 6px;
-    padding: 0.4rem 0.6rem 0.45rem;
-    width: 250px;
+    padding: 0.4rem 0.6rem 0.4rem;
+    width: 230px;
     font: 12px/1.35 system-ui, sans-serif;
     color: #24292f;
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
@@ -658,28 +847,26 @@ import Base from '../layouts/Base.astro';
   }
   .map-legend .lg-unit {
     color: #57606a;
-  }
-  .map-legend .lg-mode {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin-top: 0.2rem;
-    color: #57606a;
     font-size: 11px;
   }
-  .map-legend .lg-mode button {
-    font: inherit;
-    padding: 0.05rem 0.4rem;
-    border: 1px solid #d0d7de;
-    border-radius: 4px;
-    background: #fff;
-    color: #24292f;
-    cursor: pointer;
+  .map-legend .lg-bar {
+    background-color: #e9ecef;
   }
-  .map-legend .lg-mode button[aria-pressed='true'] {
-    background: #24292f;
-    border-color: #24292f;
-    color: #fff;
+  .map-legend .lg-hot {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.15rem;
+    font-size: 11px;
+    color: #24292f;
+  }
+  .map-legend .lg-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1.2px solid #0b1a2b;
   }
   .map-legend .lg-cell {
     margin-top: 0.2rem;
@@ -710,7 +897,6 @@ import Base from '../layouts/Base.astro';
     .leaflet-bottom.leaflet-left {
       bottom: 48px;
     }
-    .map-legend .lg-mode span,
     .map-legend .lg-cell {
       display: none;
     }
@@ -748,6 +934,7 @@ import Base from '../layouts/Base.astro';
   import { monthStats, topAnomalies } from '../lib/stats';
   import { exportHotspots, hotspotYears, monthlyCsv } from '../lib/csv';
   import { cellLayer } from '../lib/cellmap';
+  import type { Hotspot } from '../lib/map';
   import { WORLD_CODE, mergeLayers, sumAnnual, sumSeries, unionBBox, worldModel } from '../lib/world';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -758,9 +945,16 @@ import Base from '../layouts/Base.astro';
   // Fixed map colour scales (log), shared by all countries. A cell has at most 31 cell-days in
   // a month; per-cell 99th percentiles are 6–15 per month and 4–19 per year (2012–2025, 8 countries).
   const MAP_SCALE = {
-    month: { max: 31, unit: 'Cell-days in the month per 0.1° cell, log scale' },
-    period: { max: 30, unit: 'Cell-days per year per 0.1° cell (period average), log scale' },
+    month: { max: 31, unit: 'cell-days per 0.1° cell' },
+    period: { max: 30, unit: 'cell-days per 0.1° cell per year' },
+    short: { max: 31, unit: 'cell-days per 0.1° cell, total in the period' },
   };
+  // Calendar "vs typical" mode: log2 of the anomaly ratio, clipped to ¼…4×; white = typical.
+  const ANOM_LOG2 = 2;
+  const ANOM_SCALE: [number, string][] = [
+    [0, '#2166ac'], [0.25, '#92c5de'], [0.5, '#f7f7f7'], [0.75, '#f4a582'], [1, '#b2182b'],
+  ];
+  let calMode: 'value' | 'anom' = 'value';
   const FIRMS_URL = 'https://firms.modaps.eosdis.nasa.gov/download/';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -785,7 +979,7 @@ import Base from '../layouts/Base.astro';
   const dlCancel = $<HTMLButtonElement>('dl-cancel');
   const dlStatus = $('dl-status');
   const dlNote = $('dl-note');
-  const viewBtns = [...document.querySelectorAll<HTMLButtonElement>('.view-toggle button')];
+  const viewBtns = [...document.querySelectorAll<HTMLButtonElement>('.view-toggle button[data-view]')];
   const viewNote = $('view-note');
   const modeRadios = [...document.querySelectorAll<HTMLInputElement>('input[name=mode]')];
 
@@ -851,10 +1045,10 @@ import Base from '../layouts/Base.astro';
         <div class="now-fig ${cls}"><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b>
           <span>typical, ${word} the usual ${calName}</span></div>
         <dl>
-          <div><dt>Typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
-          <div><dt>Usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
-          <div><dt>Rank among ${s.nAll} ${calName}s</dt>
-          <dd>higher than ${Math.round(s.percentile)}%</dd></div>
+          <div><dt>typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
+          <div><dt>usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
+          <div><dt>rank among ${s.nAll} ${calName}s</dt>
+          <dd>above ${Math.round(s.percentile)}%</dd></div>
         </dl>`;
     }
     const interval = h.estimated[idx]
@@ -869,11 +1063,11 @@ import Base from '../layouts/Base.astro';
       <div class="now-head">
         <h2>Now · ${escapeHtml(country.name)}${label ? `, ${escapeHtml(label)}` : ''}</h2>
         <p class="now-month">${monthLabel(s.month)}${flags.map((f) => `<span class="flag">${f}</span>`).join('')}</p>
+        <p class="now-note">Latest complete month · VIIRS S-NPP scale · model
+          ${escapeHtml(d.model.model)}${h.area ? ' · custom area: higher uncertainty' : ''}</p>
       </div>
       <div class="now-fig"><b>${fmt(s.value)}</b><span>fire cell-days${interval}</span></div>
-      ${compare}
-      <p class="note now-note">Latest complete month in the data. VIIRS S-NPP scale, model
-        ${escapeHtml(d.model.model)}.${h.area ? ' Custom area: higher uncertainty than for the whole country.' : ''}</p>`;
+      ${compare}`;
     nowEl.hidden = false;
   }
 
@@ -887,6 +1081,9 @@ import Base from '../layouts/Base.astro';
     const years: number[] = [];
     for (let y = y0; y <= y1; y++) years.push(y);
 
+    const anom = calMode === 'anom';
+    // "vs typical" always compares harmonized values (raw counts jump in 2012).
+    const hh = current?.h ?? h;
     const z: (number | null)[][] = years.map(() => new Array(12).fill(null));
     const text: string[][] = years.map(() => new Array(12).fill(''));
     const lowX: number[] = [], lowY: number[] = [];
@@ -902,13 +1099,20 @@ import Base from '../layouts/Base.astro';
       const c = a % 12;
       const v = h.value[i];
       max = Math.max(max, v);
-      z[r][c] = Math.log10(1 + v);
+      const st = monthStats(hh, i);
+      z[r][c] = anom
+        ? (st.ratio === null ? null : Math.max(-ANOM_LOG2, Math.min(ANOM_LOG2, Math.log2(st.ratio))))
+        : Math.log10(1 + v);
       const lines = [
         `<b>${MONTHS[c]} ${years[r]}</b>`,
         h.raw
           ? `${a < monthAbs(d.model.viirs_first_month) ? 'Raw MODIS' : 'Raw VIIRS'}: <b>${fmt(v)}</b> cell-days`
           : `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
       ];
+      if (st.ratio !== null) {
+        const rt = st.ratio >= 10 ? st.ratio.toFixed(0) : st.ratio.toFixed(1);
+        lines.push(`<b>${rt}×</b> typical (median ${st.refFrom}–${st.refTo}: ${fmt(st.median!)})`);
+      } else if (anom) lines.push('Not enough earlier years for a typical value');
       if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
       lines.push(
         `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${raw(h.viirs[i], a, viirsFrom, viirsTo)}`,
@@ -941,18 +1145,32 @@ import Base from '../layouts/Base.astro';
         text: text as unknown as string[],
         hovertemplate: '%{text}<extra></extra>',
         hoverongaps: false,
-        colorscale: 'Cividis',
-        zmin,
-        zmax: Math.max(Math.log10(1 + Math.max(max, 1)), zmin + 0.1),
         xgap: 1,
         ygap: 1,
         showlegend: false,
-        colorbar: {
-          title: { text: 'cell-days', side: 'right' },
-          tickvals: ticks.map((t) => Math.log10(1 + t)),
-          ticktext: ticks.map(String),
-          thickness: 12,
-        },
+        ...(anom
+          ? {
+            colorscale: ANOM_SCALE,
+            zmin: -ANOM_LOG2,
+            zmax: ANOM_LOG2,
+            colorbar: {
+              title: { text: '× typical', side: 'right' },
+              tickvals: [-2, -1, 0, 1, 2],
+              ticktext: ['¼ or less', '½', '1 (typical)', '2×', '4× or more'],
+              thickness: 12,
+            },
+          }
+          : {
+            colorscale: 'Cividis',
+            zmin,
+            zmax: Math.max(Math.log10(1 + Math.max(max, 1)), zmin + 0.1),
+            colorbar: {
+              title: { text: 'cell-days', side: 'right' },
+              tickvals: ticks.map((t) => Math.log10(1 + t)),
+              ticktext: ticks.map(String),
+              thickness: 12,
+            },
+          }),
       } as Partial<Plotly.Data>,
       {
         type: 'scatter', mode: 'markers', x: lowX, y: lowY, name: 'known sensor problem',
@@ -991,7 +1209,7 @@ import Base from '../layouts/Base.astro';
     calEl.style.height = `${calH}px`; // Plots.resize autosizes to the container
     const layout: Partial<Plotly.Layout> = {
       height: calH,
-      margin: { l: 44, r: 10, t: 28, b: 40 },
+      margin: { l: 44, r: anom ? 30 : 10, t: 28, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
       font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
@@ -1025,6 +1243,14 @@ import Base from '../layouts/Base.astro';
       });
     }
     const parts = [];
+    if (anom) {
+      $('calendar-unit').textContent = 'month vs its typical level';
+      const blank = z.flat().some((v) => v === null);
+      noteEl.innerHTML = '× typical = (value + k) / (median + k), median of the same month in the 10 years before, ' +
+        'as in Top anomalies. Red: above the usual level, blue: below. Always harmonized values.' +
+        (blank ? ' Blank: fewer than 5 earlier years to compare with.' : '');
+      return;
+    }
     if (h.raw) {
       parts.push(showStep
         ? 'Raw counts. Above the red line: MODIS, below: VIIRS S-NPP. The sensors count differently, so the series jumps at the switch.'
@@ -1113,6 +1339,8 @@ import Base from '../layouts/Base.astro';
       anomEl.innerHTML = '<p class="note">Not enough history in the selected period.</p>';
       return;
     }
+    const maxR = Math.max(...top.map((a) => a.ratio!));
+    const anyFlag = top.some((a) => a.estimated || a.preliminary || a.lowQuality);
     const rows = top.map((a, i) => {
       const flags = [
         a.estimated ? 'estimated' : '',
@@ -1121,12 +1349,12 @@ import Base from '../layouts/Base.astro';
       ].filter(Boolean).join(', ');
       const r = a.ratio!;
       return `<tr data-month="${a.month}" title="Show on the map"><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
-        <td><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td><td>${fmt(a.median!)}</td>
-        <td>${Math.round(a.percentile)}%</td><td>${flags}</td></tr>`;
+        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td>
+        <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}%</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
     });
     anomEl.innerHTML = `<div class="table-wrap"><table class="anom">
       <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th>× typical</th><th>Typical</th>
-      <th>Percentile</th><th>Notes</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+      <th>Percentile</th>${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }
 
   // ------------------------------------------------------------------ export
@@ -1221,9 +1449,12 @@ import Base from '../layouts/Base.astro';
       title = `${monthLabel(monthStr(selAbs))} · ${kind}`;
       label.textContent = monthLabel(monthStr(selAbs));
     } else {
-      title = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))} · average per year`;
+      const span = `${shortMonth(monthStr(first + fromIdx))} – ${shortMonth(monthStr(first + toIdx))}`;
+      title = `${span} · ${toIdx - fromIdx + 1 >= 12 ? 'average per year' : 'total in the period'}`;
       label.textContent = 'Whole period';
     }
+    $('month-step').hidden = mapMode !== 'month';
+    updateHotspots();
     $<HTMLButtonElement>('map-prev').disabled = mapMode !== 'month' || i <= fromIdx;
     $<HTMLButtonElement>('map-next').disabled = mapMode !== 'month' || i >= toIdx;
     markCalendar();
@@ -1236,12 +1467,75 @@ import Base from '../layouts/Base.astro';
       areaMap.setCells(layerFor(i, i), title, MAP_SCALE.month);
     } else {
       // Whole period: average per year, so the colour scale does not depend on the period length.
+      // Periods under 12 months: total in the period on the month scale (scaling a few months up
+      // to a year would make single detections look like hot spots).
       const layer = layerFor(fromIdx, toIdx);
+      if (layer.months < 12) {
+        areaMap.setCells(layer, title, MAP_SCALE.short);
+        return;
+      }
       const perYear = 12 / layer.months;
       for (let j = 0; j < layer.value.length; j++) layer.value[j] *= perYear;
       layer.max *= perYear;
       layer.total *= perYear;
       areaMap.setCells(layer, title, MAP_SCALE.period);
+    }
+  }
+
+  // Hotspot points of the month on the map: yearly files, cached per country and year.
+  const hotCache = new Map<string, Promise<Hotspot[]>>();
+  let hotToken = 0;
+
+  function loadHotYear(code: string, year: number): Promise<Hotspot[]> {
+    const key = `${code}/${year}`;
+    let pr = hotCache.get(key);
+    if (!pr) {
+      pr = fetch(dataUrl(`${code}/hotspots/${year}.csv`))
+        .then((r) => {
+          if (!r.ok) throw new Error(`hotspots ${key}: ${r.status}`);
+          return r.text();
+        })
+        .then((text) => text.split(/\r?\n/).slice(1).filter(Boolean).map((line) => {
+          const f = line.split(',');
+          return { date: f[0], time: f[1], lat: Number(f[2]), lon: Number(f[3]), sensor: f[4], frp: Number(f[5]) };
+        }));
+      pr.catch(() => hotCache.delete(key));
+      hotCache.set(key, pr);
+    }
+    return pr;
+  }
+
+  async function updateHotspots() {
+    if (!areaMap || !current || selAbs === null) return;
+    const token = ++hotToken;
+    const { country, d } = current;
+    const on = $<HTMLInputElement>('show-hot').checked;
+    if (!on || mapMode !== 'month') {
+      areaMap.setHotspots(null, on ? 'Hotspot points: choose "One month"' : '');
+      return;
+    }
+    if (country.code === WORLD_CODE) {
+      areaMap.setHotspots(null, 'Hotspot points: choose one country');
+      return;
+    }
+    const ym = monthStr(selAbs);
+    const year = Math.floor(selAbs / 12);
+    if (!d.model.hotspots) {
+      areaMap.setHotspots(null, 'Hotspot points: too large for this site, see FIRMS');
+      return;
+    }
+    if (!hotspotYears(d.model, ym, ym).length) {
+      areaMap.setHotspots(null, 'No hotspot points for this month');
+      return;
+    }
+    areaMap.setHotspots(null, 'Loading hotspot points…');
+    try {
+      const all = await loadHotYear(country.code, year);
+      if (token !== hotToken) return;
+      const pts = all.filter((p) => p.date.startsWith(ym));
+      areaMap.setHotspots(pts, `${pts.length.toLocaleString('en-US')} hotspot detections (vegetation), click a point`);
+    } catch {
+      if (token === hotToken) areaMap.setHotspots(null, 'Hotspot points could not be loaded');
     }
   }
 
@@ -1315,6 +1609,20 @@ import Base from '../layouts/Base.astro';
     document.querySelectorAll<HTMLInputElement>('input[name=mapmode]').forEach((r) => r.addEventListener('change', () => {
       mapMode = r.value as 'month' | 'period';
       updateMapLayer();
+    }));
+    $('show-hot').addEventListener('change', () => updateHotspots());
+    document.querySelectorAll<HTMLButtonElement>('button[data-cal]').forEach((b) => b.addEventListener('click', () => {
+      calMode = b.dataset.cal as 'value' | 'anom';
+      document.querySelectorAll<HTMLButtonElement>('button[data-cal]')
+        .forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.cal === calMode)));
+      if (current) syncView(current.h, current.d);
+      rerenderCalendar();
+    }));
+    document.querySelectorAll<HTMLButtonElement>('button[data-smooth]').forEach((b) => b.addEventListener('click', () => {
+      const on = b.dataset.smooth === '1';
+      document.querySelectorAll<HTMLButtonElement>('button[data-smooth]')
+        .forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.smooth === '1') === on)));
+      areaMap?.setSmooth(on);
     }));
     $('map-prev').addEventListener('click', () => selAbs !== null && selectMonth(selAbs - 1));
     $('map-next').addEventListener('click', () => selAbs !== null && selectMonth(selAbs + 1));
@@ -1549,7 +1857,7 @@ import Base from '../layouts/Base.astro';
           btnUndo.disabled = points === 0;
           hint.textContent = drawing
             ? `Click to add points (${points}). Double-click or Finish to close the polygon.`
-            : 'Or pick an example / enter a rectangle.';
+            : '';
         },
       });
       btnDraw.addEventListener('click', () => areaMap!.startDrawing());
@@ -1557,7 +1865,7 @@ import Base from '../layouts/Base.astro';
       btnUndo.addEventListener('click', () => areaMap!.undo());
       btnCancel.addEventListener('click', () => areaMap!.cancelDrawing());
       btnDraw.disabled = false;
-      hint.textContent = 'Or pick an example / enter a rectangle.';
+      hint.textContent = '';
       const c = current?.country ?? countries.find((x) => x.code === state.code);
       if (c) {
         try {

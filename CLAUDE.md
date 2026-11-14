@@ -163,9 +163,10 @@ Layout (user decision, 2026-11-14, revised same day): CSS grid, nothing floats o
 panel (collapsible) | "Now" strip across the top | Leaflet map (Sentinel-2 cloudless base from EOX, OSM option)
 and chart panel side by side, tabs Calendar, Per year, Top anomalies, How to read it. Calendar rows fit the
 panel height; its colour range starts at the 2nd percentile of months without sensor problems. Map layer = per-cell share of the harmonized
-value (`src/lib/cellmap.ts`, same rule as `harmonizeArea`); clicking a calendar month or anomaly row maps it.
+value (`src/lib/cellmap.ts`, same rule as `harmonizeArea`); clicking a calendar month or anomaly row maps it. In "One month" mode the map also shows the month's hotspot points
+(yearly `hotspots/{year}.csv`, cached; click = date, UTC time, sensor, FRP); not for AU/CA or "All countries".
 Below 1150 px everything stacks in one column. Map colours use one fixed scale for all countries
-(month: 0–31 cell-days per cell; period: average per year, 0–30). "All countries (8)" entry
+(month: 0–31 cell-days per cell; period: average per year, 0–30; periods under 12 months: total in the period on the 0–31 scale, user decision 2026-11-14). "All countries (8)" entry
 (`src/lib/world.ts`): each country harmonized with its own model, then summed (series, annual totals
 and intervals, map layers); hotspot export only per country.
 
