@@ -309,6 +309,51 @@ Findings:
   PT 0.70 / 0.64). Greece after 2012 shows no correlation for any satellite series: the large
   2021 and 2023 fires are compact in cell-days (see §1a) while many small fires fill other years.
 
+### 9b. Custom areas before 2012: country share (`pipeline/area.py`, `pipeline/area_check.py`)
+
+The site lets users pick an area smaller than the country. Applying the country model to the
+area's own MODIS sum fails for small areas: the log model has an intercept, so an area with no
+MODIS detections still gets `expm1(a)` ≈ 4–20 cell-days per month (PL summer ≈ 20). Before 2012
+the site therefore uses the **country share**: `V_area = V_country × M_area / M_country`
+(0 when the whole country has no MODIS cell-day that month). From 2012-02 the area's own observed
+VIIRS cell-days are shown. With the whole country selected the site shows the country series
+unchanged.
+
+Test design (fixed before running): areas = 2°×2° blocks anchored at 0°/0° (a cell belongs to the
+block holding its center) with ≥ 20 MODIS cell-days in the calibration months; both methods use the
+same leave-one-year-out folds as §4; truth = the block's observed S-NPP cell-days 2012–2025.
+Log-RMSE per block over all calibration months, median over blocks; bias = mean log1p residual;
+annual error = mean |error| over block-years with VIIRS > 0, median over blocks.
+
+| Country | Blocks | Log-RMSE direct / share (median) | Bias direct / share | Annual error direct / share | Share better |
+|---|---|---|---|---|---|
+| PL | 17 | 1.90 / 0.93 | +1.80 / −0.27 | 575% / 44% | 15 / 17 |
+| PT | 8 | 0.79 / 0.75 | +0.68 / −0.16 | 82% / 21% | 4 / 8 |
+| ES | 26 | 1.03 / 0.80 | +1.04 / −0.19 | 144% / 28% | 23 / 26 |
+| GR | 15 | 1.23 / 0.85 | +1.06 / −0.22 | 170% / 23% | 12 / 15 |
+| UA | 34 | 1.14 / 0.68 | +1.14 / −0.18 | 94% / 15% | 34 / 34 |
+| AU | 216 | 1.22 / 0.54 | +1.10 / −0.17 | 171% / 28% | 182 / 216 |
+| CA | 287 | 2.44 / 0.41 | +2.20 / −0.11 | 2238% / 49% | 278 / 287 |
+| CL | 25 | 1.55 / 0.89 | +1.42 / −0.30 | 386% / 54% | 21 / 25 |
+
+Presets (shown separately, not part of the block statistics): Podkarpacie 1.83 / 0.96,
+Biebrza valley 2.67 / 0.34, Algarve 1.07 / 0.98 (log-RMSE direct / share).
+
+- The share method wins in every country; the direct model overestimates small areas strongly
+  (bias +0.7 to +2.2 in log1p). The share method is slightly low (−0.1 to −0.3).
+- **Limitation:** an area with MODIS = 0 in a month gets 0, but VIIRS sees fire there in some months:
+  0.6% (UA, AU) to 17% (PL) of block VIIRS cell-days fall in such months (Biebrza 34%, small area).
+  Uncertainty for areas is therefore much larger than for countries.
+- **Interval for areas** (log1p space, so a zero estimate still has an upper bound):
+  `[max(0, expm1(log1p(v) − h)), expm1(log1p(v) + h)]`, h = 80% quantile of |residual| of the
+  share method on active months (VIIRS > 0 or MODIS > 0). Calibrated on half of the blocks
+  (checkerboard), coverage on the other half: months 76–85%, years 73–88%. Stored in
+  `model.json` → `area` (`h_month` 0.79 AU to 1.39 PL/CL, i.e. ×2.2 to ×4; `h_annual` 0.27 UA to
+  1.11 CL). Blocks are 2°, so the interval may still be too narrow for much smaller areas.
+- Annual sums: years fully before VIIRS use `h_annual`; a mixed year (2012, January estimated)
+  adds the monthly interval of the estimated month to the observed sum. The country annual
+  series uses the same mixed-year rule (before stage 5 the 2012 interval was zero).
+
 ## 10. Data quality checks
 
 - All raw files checked for truncation (field count of the last row). Two Canadian files were
@@ -325,7 +370,7 @@ Findings:
 
 ## 11. Automated tests
 
-`pipeline/tests/test_pipeline.py`, 20 tests, all passing:
+`pipeline/tests/test_pipeline.py` and `test_area.py`, 27 tests, all passing:
 - 0.1° cell indexing at float edges
 - `type` filter, duplicate removal, leading zeros in `acq_time`, error on unknown satellite,
   skipping browser duplicates such as `Poland(1).csv`
@@ -335,6 +380,9 @@ Findings:
   majority mask rule, overlapping files rejected
 - the regression recovers known `a`, `b` on synthetic data; methods ranked correctly; D chosen on a tie
 - switch from model to observed VIIRS at 2012-02; Terra-only scaling
+- custom areas: LOYO folds equal to validation, share = country model when area = country,
+  zero when the country has no MODIS, point-in-polygon and inclusive rectangle edges, presets valid;
+  mixed-year (2012) annual interval
 - consistency of the generated files for every built country (totals, bbox, intervals,
   D/E better than A, file size under the GitHub limit)
 

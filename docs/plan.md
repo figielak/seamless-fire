@@ -78,10 +78,11 @@ Pułapki w danych:
    każdego kraju, kalibracja na latach 2012–2025. Model bez członu sezonowego (D) to przypadek,
    w którym wszystkie `a` są równe, więc strona obsługuje oba warianty jednym kodem.
    Dla krajów z małą liczbą pożarów wspólny model zapasowy
-6. **Dowolny obszar:** przeglądarka najpierw sumuje surowe komórko-dni w prostokącie, a dopiero
-   potem stosuje model. Regresja log-log nie jest addytywna, więc nie wolno sumować wartości
-   zharmonizowanych osobno dla każdej komórki. Przy prostokącie mniejszym niż kraj widoczna
-   uwaga o większej niepewności
+6. **Dowolny obszar:** przeglądarka najpierw sumuje surowe komórko-dni w obszarze. Przed 2012
+   wartość = udział kraju `V_kraj × M_obszar / M_kraj` (0, gdy `M_kraj = 0`; zmiana z 14.11,
+   bo model wprost na małym obszarze daje wyraz wolny ≈ 4–20/miesiąc, `docs/validation.md` §9b).
+   Od 2012-02 obserwowane VIIRS obszaru. Nie wolno sumować wartości zharmonizowanych osobno
+   dla każdej komórki. Dla obszaru widoczna uwaga o większej niepewności
 7. Walidacja: leave-one-year-out (błąd roczny, log-RMSE), porównanie metod
    A (mnożnik globalny), B (mnożnik dla kraju), C (mnożnik kraj × miesiąc), D (log-log),
    E (log-log z członem sezonowym), test wsteczny

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "podkarpacie",
+    "name": "Podkarpacie (bounding box)",
+    "country": "PL",
+    "note": "Bounding box of the Podkarpackie voivodeship; also covers small parts of neighbouring regions.",
+    "bbox": [21.12, 49.0, 23.57, 50.83]
+  },
+  {
+    "id": "biebrza",
+    "name": "Biebrza valley (approximate)",
+    "country": "PL",
+    "note": "Hand-drawn outline of the Biebrza valley (lower, middle and upper basin). Approximate, not the official national park boundary.",
+    "polygon": [
+      [22.33, 53.17], [22.52, 53.16], [22.71, 53.38], [22.92, 53.52], [23.12, 53.62],
+      [23.42, 53.68], [23.62, 53.8], [23.58, 53.88], [23.38, 53.8], [23.08, 53.74],
+      [22.82, 53.72], [22.58, 53.62], [22.51, 53.48], [22.41, 53.36], [22.31, 53.26]
+    ]
+  },
+  {
+    "id": "algarve",
+    "name": "Algarve (bounding box)",
+    "country": "PT",
+    "note": "Bounding box of the Faro district.",
+    "bbox": [-9.02, 36.92, -7.38, 37.53]
+  }
+]

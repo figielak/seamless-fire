@@ -164,15 +164,20 @@ def log_resid(test: pd.DataFrame, pred: np.ndarray) -> np.ndarray:
     return np.log1p(pred) - np.log1p(test["V"].to_numpy())
 
 
+def loyo_fits(frame_c: pd.DataFrame, frame_all: pd.DataFrame, method: str) -> dict[int, dict]:
+    """Leave-one-year-out folds: year -> parameters fitted without that year.
+    Shared by validate() and the custom-area check (area.py), so both use the same folds."""
+    return {int(y): fit(method, frame_c[frame_c["year"] != y], frame_all[frame_all["year"] != y])
+            for y in sorted(frame_c["year"].unique())}
+
+
 def validate(frame_c: pd.DataFrame, frame_all: pd.DataFrame, methods: list[str]) -> dict:
     """LOYO and backtest for one country (frame_c) given all countries (frame_all, for A)."""
     res = {}
-    years = sorted(frame_c["year"].unique())
     for m in methods:
         errs, resids, loyo_ann_logratio = [], [], []
-        for y in years:
+        for y, p in loyo_fits(frame_c, frame_all, m).items():
             test = frame_c[frame_c["year"] == y]
-            p = fit(m, frame_c[frame_c["year"] != y], frame_all[frame_all["year"] != y])
             pred = predict(m, p, test)
             e = annual_errors(test, pred)
             errs.append(e)
@@ -289,20 +294,37 @@ def harmonized_monthly(ms: pd.DataFrame, a: list, b: float, terra: dict) -> pd.D
     }, index=ms.index)
 
 
-def annual_series(hm: pd.DataFrame, sigma_annual: float, b: float, sigma_terra: float) -> dict:
+def annual_series(hm: pd.DataFrame, sigma_annual: float, b: float, sigma_terra: float,
+                  sigma: float) -> dict:
+    """Annual sums with ~80% interval. Observed and estimated parts are kept apart:
+    a fully estimated year uses the annual sigma; a mixed year (2012: January estimated)
+    adds the monthly intervals of its estimated months to the observed sum (conservative)."""
+    k_month = np.where(hm["terra_only"], np.exp(INTERVAL_Z * np.hypot(sigma, b * sigma_terra)),
+                       np.exp(INTERVAL_Z * sigma))
+    est = hm["estimated"].to_numpy(bool)
+    v = hm["harmonized"].to_numpy(float)
+    parts = pd.DataFrame({
+        "obs": np.where(est, 0.0, v),
+        "est_lo": np.where(est, v / k_month, 0.0),
+        "est_hi": np.where(est, v * k_month, 0.0),
+    }, index=hm.index)
     g = hm.groupby(hm.index.year).agg(
         modis=("modis", "sum"), viirs=("viirs", "sum"), harmonized=("harmonized", "sum"),
         estimated=("estimated", "all"), terra_only=("terra_only", "any"),
         n_months=("harmonized", "size"))
+    p = parts.groupby(hm.index.year).sum()
     s = np.where(g["terra_only"], np.sqrt(sigma_annual ** 2 + (b * sigma_terra) ** 2), sigma_annual)
-    k = np.where(g["estimated"], np.exp(INTERVAL_Z * s), 1.0)
+    k = np.exp(INTERVAL_Z * s)
+    full = g["estimated"].to_numpy(bool)
+    lo = np.where(full, g["harmonized"] / k, p["obs"] + p["est_lo"])
+    hi = np.where(full, g["harmonized"] * k, p["obs"] + p["est_hi"])
     return {
         "years": [int(y) for y in g.index],
         "modis": g["modis"].astype(int).tolist(),
         "viirs": g["viirs"].astype(int).tolist(),
         "harmonized": [round(float(v), 1) for v in g["harmonized"]],
-        "lo": [round(float(v), 1) for v in g["harmonized"] / k],
-        "hi": [round(float(v), 1) for v in g["harmonized"] * k],
+        "lo": [round(float(v), 1) for v in lo],
+        "hi": [round(float(v), 1) for v in hi],
         "partial_year": [bool(n < 12) for n in g["n_months"]],
     }
 
@@ -325,6 +347,7 @@ def cached_countries() -> list[str]:
 
 def build_models(codes: list[str]) -> dict:
     """Write {CC}/model.json for each code; A and the pooled model use all cached countries."""
+    from area import area_validation  # lazy: area imports this module
     data = {}
     for c in cached_countries():
         load_meta(c)  # every country in method A / the pooled model must use the current cache
@@ -372,7 +395,7 @@ def build_models(codes: list[str]) -> dict:
             "industrial_share": industrial_share(code),
             "industrial_share_years": [int(FIRST_MONTH[:4]), HIST_LAST_YEAR],
             "industrial_mask": meta["industrial_mask"],
-            "annual": annual_series(hm, sigma_annual, p["b"], terra["sigma"]),
+            "annual": annual_series(hm, sigma_annual, p["b"], terra["sigma"], sigma),
             "low_quality": LOW_QUALITY, "calib_excluded": CALIB_EXCLUDE,
             "last_data": {k: str(v.date()) for k, v in last.items()},
             # End of data coverage (not the last detection date).
@@ -381,11 +404,15 @@ def build_models(codes: list[str]) -> dict:
             "coverage": meta["coverage"],
             "hotspots": meta["hotspots"],
             "hotspot_sensors": meta["sensors_by_year"] if meta["hotspots"] else {},
+            # Custom areas: country-share check on 2° blocks, interval half-widths (log1p).
+            "area": area_validation(code, cd, frame, fit_frame, frame_all, variant),
         }
         out = rnd(model)
         # Parameters the site computes with keep full precision (rounded ones shift sums).
         for k in ("a", "b", "sigma", "sigma_annual", "interval_z"):
             out[k] = model[k]
+        for k in ("h_month", "h_annual"):
+            out["area"][k] = model["area"][k]
         out["terra_only"] = terra
         path = OUT_DIR / code / "model.json"
         path.parent.mkdir(parents=True, exist_ok=True)

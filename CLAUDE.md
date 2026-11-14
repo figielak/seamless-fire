@@ -76,10 +76,15 @@ Commands:
    Terra-only months (before Aqua data start, ~mid-2002): scale MODIS cell-days by the country
    (Terra+Aqua)/Terra ratio first, widen the interval for that extra step.
    Calibration excludes S-NPP Jul–Aug 2022 and Aqua Aug–Sep 2020 (sensor outages).
-7. **Custom area** (rectangle or polygon; a cell is inside if its center is inside the shape):
-   the browser sums raw cell-days inside the area first, then applies
-   the model. Never sum per-cell harmonized values (log model is not additive).
-   Show an "higher uncertainty" note when the area is smaller than the country.
+7. **Custom area** (rectangle or polygon; a cell is inside if its center is inside the shape,
+   rectangle edges inclusive; coordinates `[lon, lat]`; presets in `src/lib/presets.json`):
+   the browser sums raw cell-days inside the area first. Estimated months use the **country share**
+   `V_area = V_country × M_area / M_country` (0 when `M_country = 0`; user approved 2026-11-14,
+   the direct model on a small area keeps its intercept ≈ 4–20/month, see `docs/validation.md` §9b).
+   Observed months = area VIIRS. "Whole country" shows the country series unchanged.
+   Area interval in log1p space: `expm1(log1p(v) ± h)`, h = `model.area.h_month` / `h_annual`.
+   Never sum per-cell harmonized values. Show a "higher uncertainty" note for areas.
+   Date range limits calendar, anomaly ranking, annual sums and export; statistics use full history.
 8. Anomaly: `(x + k) / (median + k)`, median of the same calendar month over the last
    10 complete years; `k` scales with the area (e.g. fraction of mean monthly median),
    not a fixed 10. Also percentile of the month among all years.
@@ -92,7 +97,7 @@ Commands:
 |---|---|
 | `countries.json` | `[{code, name, bbox: [W, S, E, N]}]` |
 | `{CC}/cells.json` | rows: lat index, lon index (0.1°), month, MODIS cell-days, VIIRS cell-days (S-NPP scale), `viirs_det` raw S-NPP detections (display only; missing = no data) |
-| `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share (files 2000–2025), last data date, `last_complete_month` (= 2026-10, drives the "Now" panel), `preliminary` months, `coverage` (raw file dates per satellite), `annual.partial_year`, `hotspots` flag, `hotspot_sensors` per year, `industrial_mask` stats |
+| `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share (files 2000–2025), last data date, `last_complete_month` (= 2026-10, drives the "Now" panel), `preliminary` months, `coverage` (raw file dates per satellite), `annual.partial_year` (2012 interval = observed + estimated-month interval), `hotspots` flag, `hotspot_sensors` per year, `industrial_mask` stats, `area` (custom-area check, `h_month`, `h_annual`) |
 | `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor (Terra/Aqua/SNPP/N20), frp (for CSV export). Only PL, PT, ES, GR, UA, CL (AU/CA too big for Pages → link to FIRMS). 2026 = VIIRS only |
 
 Keep files small: compact arrays, no pretty printing. Check size before committing
