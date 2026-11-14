@@ -157,6 +157,8 @@ Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 1. Pipeline: load, filter, cell-days → `countries.json`, `cells.json` for PL, PT. Check sanity numbers.
 2. Pipeline: validation A–E, model → `model.json`.
+   Plus spatial agreement (2012–2025, per country): share of MODIS cell-days that VIIRS also
+   detects, and vice versa, overall and per month; store in `model.json` for the Method page.
 3. Site minimum: country select, calendar, "Now" panel. **Deploy to GitHub Pages immediately.**
 4. Pipeline: other countries, 2026 data, hotspot files.
 5. Site: rectangle, Leaflet polygon, date range, CSV export, anomalies, annual chart.
