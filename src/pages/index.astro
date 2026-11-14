@@ -136,6 +136,7 @@ import Base from '../layouts/Base.astro';
         <div class="tab" data-tab="annual" hidden>
           <p class="unit"><span id="annual-unit">sum of monthly cell-days, ~80% interval for estimated years</span>.</p>
           <div id="annual" class="annual"></div>
+          <div id="trend" class="trend"></div>
           <p class="note" id="annual-note"></p>
         </div>
         <div class="tab" data-tab="season" hidden>
@@ -671,6 +672,37 @@ import Base from '../layouts/Base.astro';
 </style>
 
 <style is:global>
+  /* trend summary (built with innerHTML, so global) */
+  .trend p {
+    margin: 0.3rem 0;
+  }
+  .trend-months {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 2px;
+    margin: 0.4rem 0;
+    font-size: 11px;
+    text-align: center;
+  }
+  .trend-months div {
+    padding: 0.2rem 0;
+    border-radius: 3px;
+    background: #f3f6f9;
+    color: #57606a;
+  }
+  .trend-months b {
+    display: block;
+    font-weight: 600;
+    color: #24292f;
+  }
+  .trend-months .up {
+    background: #fde2dd;
+    color: #8f1d0e;
+  }
+  .trend-months .down {
+    background: #dbe7f6;
+    color: #0b3a75;
+  }
   select.small {
     min-width: 0;
   }
@@ -942,6 +974,7 @@ import Base from '../layouts/Base.astro';
   import { dataUrl, fetchJson, loadCountry, loadDaily, type Country, type CountryData } from '../lib/data';
   import { comparedDays, mtdStats, sameDaysHistory, seriesEnd, type LiveInfo } from '../lib/live';
   import { seasonData, seasonYears } from '../lib/season';
+  import { trends, type Trend } from '../lib/trend';
   import {
     annualTotals,
     coverageSpan,
@@ -1423,6 +1456,7 @@ import Base from '../layouts/Base.astro';
     const data: Partial<Plotly.Data>[] = [
       {
         type: 'bar',
+        showlegend: false,
         x: t.map((x) => x.year),
         y: t.map((x) => x.value),
         text: hover,
@@ -1440,16 +1474,28 @@ import Base from '../layouts/Base.astro';
         },
       } as Partial<Plotly.Data>,
     ];
+    // Trend lines (always on harmonized values: raw counts jump in 2012).
+    const tr = trends(current?.h ?? h, d.model, fromIdx, toIdx);
+    const line = (x: Trend | null, name: string, dash: string, color: string) => x ? [{
+      type: 'scatter', mode: 'lines', name,
+      x: [x.from, x.to], y: [x.from, x.to].map((yr) => Math.expm1(x.intercept + x.slope * yr)),
+      line: { color, width: 2, dash }, hoverinfo: 'skip',
+    } as Partial<Plotly.Data>] : [];
+    if (!h.raw) {
+      data.push(...line(tr.all, 'trend', 'dash', '#e8432e'), ...line(tr.viirs, 'trend, VIIRS only', 'dot', '#f28e2b'));
+    }
+    renderTrend(tr);
     const layout: Partial<Plotly.Layout> = {
       height: 320, // container height set in CSS: Plots.resize autosizes to it
-      margin: { l: 60, r: 10, t: 10, b: 40 },
+      margin: { l: 60, r: 10, t: 30, b: 40 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
       font: { family: 'system-ui, sans-serif', size: 12, color: '#24292f' },
       xaxis: { fixedrange: true, dtick: t.length > 14 ? 2 : 1 },
       yaxis: { fixedrange: true, title: { text: 'cell-days' }, rangemode: 'tozero', gridcolor: '#e5e8ec' },
       bargap: 0.15,
-      showlegend: false,
+      showlegend: true,
+      legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom' },
     };
     await Plotly.react(annualEl, data as Plotly.Data[], layout, {
       responsive: true, displaylogo: false,
@@ -1462,6 +1508,47 @@ import Base from '../layouts/Base.astro';
         ? 'Raw counts. Grey: MODIS, dark blue: VIIRS S-NPP (2012 includes raw MODIS for January). '
         : 'Grey: estimated from MODIS, dark blue: observed VIIRS (2012 mixes one estimated month). ') +
       (partial.length ? `Hatched: partial year (${partial.join(', ')}), not comparable with full years.` : '');
+  }
+
+  // ------------------------------------------------------------------ trends
+
+  function trendText(t: Trend): string {
+    const pct = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v) >= 10 ? Math.abs(v).toFixed(0) : Math.abs(v).toFixed(1)}%`;
+    const pStr = t.p < 0.001 ? 'p < 0.001' : `p = ${t.p.toFixed(t.p < 0.01 ? 3 : 2)}`;
+    return `<b>${pct(t.pctPerYear)} per year</b> (95%: ${pct(t.lo)} to ${pct(t.hi)}), ` +
+      (t.significant ? `<b>significant</b> (${pStr})` : `not significant (${pStr})`);
+  }
+
+  function renderTrend(tr: ReturnType<typeof trends>) {
+    const el = $('trend');
+    if (!tr.all) {
+      el.innerHTML = `<p class="note">Trend: needs at least 8 complete years in the selected period.</p>`;
+      return;
+    }
+    const a = tr.all, v = tr.viirs;
+    let verdict = '';
+    if (v) {
+      const same = Math.sign(a.slope) === Math.sign(v.slope);
+      verdict = a.significant && v.significant && same
+        ? 'Both periods agree, so the trend does not come from the harmonization of MODIS years.'
+        : a.significant && !same
+          ? 'The VIIRS years alone point the other way: read the long-term trend with care.'
+          : a.significant && !v.significant
+            ? 'The VIIRS years alone are too few or too noisy to confirm it.'
+            : '';
+    }
+    const months = tr.byMonth.map((t, c) => {
+      if (!t) return `<div title="not enough years">${MONTHS[c]}<b>–</b></div>`;
+      const cls = t.significant ? (t.slope > 0 ? 'up' : 'down') : '';
+      const arrow = t.significant ? (t.slope > 0 ? '▲' : '▼') : '·';
+      const pct = `${t.pctPerYear > 0 ? '+' : t.pctPerYear < 0 ? '−' : ''}${Math.abs(t.pctPerYear).toFixed(Math.abs(t.pctPerYear) >= 10 ? 0 : 1)}%`;
+      return `<div class="${cls}" title="${MONTHS_LONG[c]} ${t.from}–${t.to}: ${pct} per year, p = ${t.p.toFixed(3)}">${MONTHS[c]}<b>${arrow} ${pct}</b></div>`;
+    }).join('');
+    el.innerHTML = `
+      <p>Trend ${a.from}–${a.to}: ${trendText(a)}.</p>
+      ${v ? `<p>VIIRS only ${v.from}–${v.to}: ${trendText(v)}. ${verdict}</p>` : ''}
+      <p class="note">By calendar month (per year, ${a.from}–${a.to}; colour = significant, red up, blue down):</p>
+      <div class="trend-months">${months}</div>`;
   }
 
   // ------------------------------------------------------------------ this season

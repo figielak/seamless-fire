@@ -187,6 +187,10 @@ same days of 2012–2025 (`{CC}/daily/`), live gaps left out of both sides. Tab 
 cumulative cell-days since 1 Jan vs 2012–2025 (P10–P90, median), exact at day D. Map and hotspot export read
 `hotspots/live.csv`; monthly CSV has `viirs_source` and `month_to_date`.
 
+Trends (`src/lib/trend.ts`, "Per year" tab): Theil–Sen on log1p annual totals + Mann–Kendall, complete years of the
+selected period (year 2000 dropped: 10 low-quality months), full period vs VIIRS-only, per calendar month; always on
+harmonized values. Results: `docs/validation.md` §14.
+
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
 - GitHub: `figielak/seamless-fire` (remote `origin`, SSH), site https://figielak.github.io/seamless-fire/. `site`/`base` come from env `SITE`/`BASE`, set by `.github/workflows/deploy.yml` from `configure-pages`

@@ -13,7 +13,7 @@ python pipeline/sanity.py PL                   # full detail for one country
 python -m unittest discover -s pipeline/tests  # unit + consistency tests
 ```
 
-Run date: 2026-11-14. Countries: Poland (PL), Portugal (PT), Spain (ES), Greece (GR),
+Run date: 2026-11-14 (near real-time sections: data through 2026-11-13). Countries: Poland (PL), Portugal (PT), Spain (ES), Greece (GR),
 Ukraine (UA), Australia (AU), Canada (CA), Chile (CL).
 
 ## 1. Unit of comparison: cell-days
@@ -370,7 +370,8 @@ Biebrza valley 2.67 / 0.34, Algarve 1.07 / 0.98 (log-RMSE direct / share).
 
 ## 11. Automated tests
 
-`pipeline/tests/test_pipeline.py` and `test_area.py`, 27 tests, all passing:
+`pipeline/tests/` (`test_pipeline.py`, `test_area.py`, `test_borders.py`, `test_live.py`), 36 tests, and
+`npm run test:site` (TypeScript, 81 tests), all passing. Pipeline tests:
 - 0.1° cell indexing at float edges
 - `type` filter, duplicate removal, leading zeros in `acq_time`, error on unknown satellite,
   skipping browser duplicates such as `Poland(1).csv`
@@ -385,8 +386,95 @@ Biebrza valley 2.67 / 0.34, Algarve 1.07 / 0.98 (log-RMSE direct / share).
   mixed-year (2012) annual interval
 - consistency of the generated files for every built country (totals, bbox, intervals,
   D/E better than A, file size under the GitHub limit)
+- country raster (cell count of a polygon with a hole, point lookup, coast growth that stops at a
+  neighbour), coverage of the daily update (complete days, gaps after missed runs, an older file
+  never moves coverage back), idempotent merge, cell-day counting of `live.json`
 
-## 12. Summary
+Site tests also check: the TypeScript harmonization against Python reference outputs; preset
+cells sum to the area series; live cell-days added on the S-NPP scale without changing earlier
+months; daily history equal to monthly VIIRS; month-to-date statistics; recurrence files against
+the hotspot files; season curves.
+
+## 12. Near real-time updates (from November 2026)
+
+The site is updated every day by `.github/workflows/update-live.yml` (`pipeline/live_update.py`):
+the FIRMS global NOAA-20 near real-time file of the last 7 days is cut to the 8 countries, the
+frozen industrial mask removes rows without `type`, and new detections are added. S-NPP near
+real-time data end between 2026-10-31 (PL) and 2026-11-02, so the live period is NOAA-20 ×
+`n20_factor` (§8) from 1 November.
+
+**Country borders** (`pipeline/borders.py`): Natural Earth 1:10m (Ukraine point of view, so Crimea is
+in Ukraine as in the FIRMS Ukraine files), rasterized to 0.01° and grown by one cell into cells of
+no other country (the 1:10m coastline misses coastal and island points). Recall against the FIRMS
+country files, 2025 NOAA-20 vegetation detections:
+
+| PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|
+| 99.94% | 99.85% | 99.94% | 99.75% | 99.91% | 99.99% | 99.997% | 99.95% |
+
+Before the coast growth Greece was 98.2%. At the Portugal–Spain border 0.10–0.15% of points go to
+the neighbour (FIRMS and Natural Earth borders differ by up to ~1 km).
+
+**Global file vs country files**, 7–11 Nov 2026 (both available), after the same filters: identical in
+PL, PT, GR, CA, CL; ES and UA +1 detection; AU −18 of 50,588 (0.04%).
+
+**Daily history** (`{CC}/daily/`, S-NPP cell-days per cell and day): sums equal the monthly VIIRS of
+`cells.json` in every month and country.
+
+**Month to date** is compared only with the same days of earlier years (2012–2025, reference
+2016–2025), never with full months. First result checked by hand: Portugal 1–13 Nov 2026 =
+99 NOAA-20 cell-days × 0.962 = 95.3 on the S-NPP scale; the same days in 2016–2025 have a median
+of 16.5, so 5.0× typical (above 97% of years). Year to date Portugal is at the median (1.0×).
+
+**Coverage**: a day counts as complete only after the next day appears in the file; days missed by
+more than 7 days without an update are listed as gaps and left out of both sides of the comparison.
+
+## 13. Fire recurrence and year-round fire
+
+The map mode "Recurrence" shows, per 0.01° cell (~1 km) and calendar month, the share of years with at
+least one S-NPP vegetation detection (Feb 2012 – Oct 2026, the Jul–Aug 2022 outage left out; cells with
+fire in a single year are not stored). The 0.1° grid of the calendar was too coarse for this question:
+the October recurrence of the Stalowa Wola cell (33%) comes almost entirely from one ~1 km spot in the
+industrial zone. The recurrence files match counts made directly from the hotspot files (test).
+
+Cells with fire in ≥ 10% of all counted months **and** in ≥ 9 of the 12 calendar months are marked as
+"year-round fire". Vegetation burning is seasonal, so these are mostly industrial sources that FIRMS
+did not flag as `type` 2. The top Polish cells are the Płock refinery, coke plants (Wałbrzych,
+Zdzieszowice), steelworks (Ostrowiec, Dąbrowa Górnicza, Częstochowa, Warsaw) and Stalowa Wola; in
+Portugal the Sines refinery; in Spain Avilés, Tarragona, Puertollano, Huelva and A Coruña. The month
+rule matters in Australia: the share rule alone marks 1,318 savanna cells that burn often but in one
+season, with the month rule 224. Counts: PL 65, PT 14, ES 90, GR 20, UA 126, AU 224, CA 203, CL 53.
+Only the top cells were checked against known sites; the marks are a display hint, the harmonized
+values do not change.
+
+## 14. Trends (`src/lib/trend.ts`)
+
+Per-year trend of annual totals: Theil–Sen slope on log(1 + cell-days) (median of all pairwise
+slopes, robust to single extreme years), Mann–Kendall test (two-sided, tie correction), Sen's 95%
+interval. Complete years only; 2000 is left out (10 months of early Terra data). The site shows the
+trend of the full harmonized period and of the observed VIIRS years alone: when both agree, the trend
+does not come from the MODIS harmonization. Unit tests check slope, S, z, p and the intercept against
+an independent brute-force Python implementation.
+
+| Country | 2001–2025 (%/yr, 95%) | VIIRS only 2013–2025 | Significant calendar months (2001–2025) |
+|---|---|---|---|
+| PL | −3.6 (−4.7 to −2.3), p < 0.001 | −3.7 (−8.0 to +0.4), p = 0.08 | Apr, May, Jul, Aug, Oct, Nov down |
+| PT | −3.7 (−6.1 to −1.4), p = 0.002 | −7.2 (−10.6 to −0.1), p = 0.04 | Jun–Oct down |
+| ES | −3.6 (−4.4 to −2.8), p < 0.001 | −3.1 (−6.7 to −0.3), p = 0.02 | Apr–Nov down |
+| GR | −3.9 (−5.2 to −2.0), p < 0.001 | −6.0 (−7.4 to −4.0), p = 0.001 | May, Jun, Sep, Oct down |
+| UA | −3.1 (−5.0 to −0.7), p = 0.01 | −8.5 (−14.6 to −1.6), p = 0.02 | Jun, Dec down |
+| AU | −1.0 (−2.4 to +0.4), p = 0.22 | −0.1, p = 0.95 | Sep, Nov down |
+| CA | +2.1 (−0.9 to +3.9), p = 0.12 | +1.9, p = 0.50 | Apr down, Aug up |
+| CL | −0.2 (−0.8 to +0.6), p = 0.66 | −1.3, p = 0.13 | Oct–Dec up |
+
+All five European countries decline by 3–4% per year, and in four of them the VIIRS years alone
+confirm it. This matches the human-driven decline of burning in agricultural landscapes reported
+globally (Andela et al., 2017, *Science* 356, 1356–1362). Example area: the Podkarpacie preset declines
+by 3.8%/yr (2001–2025, p = 0.009) and 10%/yr in the VIIRS years (p = 0.02), with April (spring grass
+burning, −5.5%/yr) and August (−6.7%/yr) significant. Caveats: p assumes independent years; the trend
+of a small area rests on few cell-days; the period of the trend follows the selected date range.
+
+## 15. Summary
 
 | Confidence in 2000–2011 estimates | Countries | Why |
 |---|---|---|

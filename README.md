@@ -20,10 +20,19 @@ pixels and detects several times more fire, so joining the two records naively m
 - **Calendar** (years × months): 2000–2011 are estimated from MODIS on the VIIRS scale with a ~80%
   interval; from February 2012 the values are observed VIIRS. Preliminary months and months with known
   sensor problems are marked.
-- **Map** of fire cells for the selected month or period, on one colour scale for all countries.
-- **"Now" panel**: the latest month compared with the typical value for that month (median, usual range,
-  percentile).
-- **Per-year chart** with uncertainty, and the **top 10 anomalies** (months most above their usual level).
+- **Updated every day.** The current month comes from FIRMS near real-time data (NOAA-20 on the S-NPP
+  scale) and is marked "month to date".
+- **Map** of fire cells for the selected month or period, on one colour scale for all countries, with the
+  month's hotspot points (date, time, sensor, FRP).
+- **Recurrence map**: for a calendar month, how often each ~1 km cell had fire in 2012–2026, so you see
+  where fires come back. Rings mark year-round fire spots (fire in most months of every season), which are
+  usually industrial sites rather than vegetation.
+- **"Now" panel**: the current month so far compared with the same days in earlier years (median, usual
+  range, percentile), plus the last full month.
+- **This season**: fire activity since 1 January against the usual range of 2012–2025.
+- **Per-year chart** with uncertainty and **trends**: the change per year (Theil–Sen, Mann–Kendall test) for the
+  whole period and for the VIIRS years alone, and for each calendar month (e.g. April burning declines).
+- **Top 10 anomalies**: months most above their usual level.
 - **Raw / harmonized toggle**: shows the false 2012 jump and how the harmonized series removes it.
 - **CSV export**: the monthly series, plus the hotspots inside the area and period (hotspot files for
   Poland, Portugal, Spain, Greece, Ukraine and Chile; for Australia and Canada they are too large, so the
@@ -67,6 +76,11 @@ docs/           plan, concept, validation report
 The browser sums the cells inside the selected area and applies the model (`src/lib/harmonize.ts`, a port
 of the Python code, tested against Python reference outputs).
 
+Daily update: a GitHub Actions job (`.github/workflows/update-live.yml`, 05:30 UTC) downloads the FIRMS global
+NOAA-20 near real-time file, keeps the points inside each country (Natural Earth borders rasterized to 0.01°,
+`pipeline/borders.py`), removes known industrial sites, adds the new detections (`pipeline/live_update.py`),
+commits only when something changed, and redeploys the site. No raw data are needed for this step.
+
 ## Run locally
 
 Requirements: Python 3.12+ with pandas and numpy, Node 24.
@@ -82,7 +96,9 @@ Download the yearly country files from FIRMS ("Archive Download" for the current
 
 ```bash
 pip install -r requirements.txt
-python pipeline/build_data.py
+python pipeline/build_data.py   # cells, models, recurrence, industrial masks
+python pipeline/live_base.py    # daily history for month-to-date comparisons, seed of the live data
+python pipeline/live_update.py  # near real-time update (what the daily job runs)
 ```
 
 Tests:
@@ -94,7 +110,7 @@ npm run check
 ```
 
 Deployment: every push to `main` builds the site and publishes it on GitHub Pages
-(`.github/workflows/deploy.yml`).
+(`.github/workflows/deploy.yml`); the daily data job calls the same workflow after it commits.
 
 ## Data sources and credits
 
@@ -102,6 +118,8 @@ Deployment: every push to `main` builds the site and publishes it on GitHub Page
   NOAA-20). We acknowledge the use of data from NASA's Fire Information for Resource Management System
   (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS).
   <https://firms.modaps.eosdis.nasa.gov/>
+- **Natural Earth** 1:10m Admin 0 countries (public domain), used to assign near real-time points to
+  countries. <https://www.naturalearthdata.com/>
 - **EFFIS** national statistics, used only for an independent check of 2000–2011: San-Miguel-Ayanz, J.
   et al., *Forest Fires in Europe, Middle East and North Africa 2024*, European Commission JRC,
   [doi:10.2760/0649290](https://dx.doi.org/10.2760/0649290). The data file is not redistributed here.
