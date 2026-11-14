@@ -447,8 +447,42 @@ import Base from '../layouts/Base.astro';
     overflow: hidden;
     clip: rect(0 0 0 0);
   }
+  /* Small laptop windows: controls stay on the left (sticky), Now, map and charts stack on the
+     right in page flow, so the map is visible without scrolling past the controls. */
+  @media (min-width: 861px) and (max-width: 1150px) {
+    .app {
+      position: static;
+      grid-template-columns: var(--left-w) minmax(0, 1fr);
+      grid-template-rows: auto calc(100vh - var(--header-h) - 150px) auto;
+      overflow: visible;
+    }
+    .app:has(.left.collapsed) {
+      grid-template-columns: 46px minmax(0, 1fr);
+    }
+    .left {
+      grid-row: 1 / 4;
+      position: sticky;
+      top: 10px;
+      max-height: calc(100vh - var(--header-h) - 20px);
+    }
+    .now {
+      grid-column: 2;
+    }
+    .map-wrap {
+      grid-row: 2;
+      grid-column: 2;
+      min-height: 360px;
+    }
+    .dock {
+      grid-row: 3;
+      grid-column: 2;
+    }
+    .dock-body {
+      overflow: visible;
+    }
+  }
   /* Narrow screens: one column in normal page flow (controls, Now, map, charts). */
-  @media (max-width: 1150px) {
+  @media (max-width: 860px) {
     .app,
     .app:has(.left.collapsed) {
       position: static;
