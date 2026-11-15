@@ -123,12 +123,23 @@ def country(feats: dict, weights: np.ndarray) -> np.ndarray:
     return np.array([float(np.asarray(feats[k], float) @ weights) for k in FEATS])
 
 
-def predict(model: dict, x: np.ndarray, date: pd.Timestamp) -> float:
-    """log1p cell-days for one day from the country feature vector."""
-    doy = min(date.dayofyear, 365)
+def anomaly(model: dict, x: np.ndarray, date: pd.Timestamp) -> float:
+    """Weather term of the model (log1p units): how far the weather moves fire activity from the
+    seasonal level. Used for the country (x = country features) and, as a local weather factor
+    exp(anomaly), for single points (x = the point's own features)."""
     s = model["seasons"][SEASON[date.month - 1]]
     z = (x - np.asarray(s["mu"])) / np.asarray(s["sd"])
-    return float(model["clim"][doy - 1] + s["beta"][0] + z @ np.asarray(s["beta"][1:]))
+    return float(s["beta"][0] + z @ np.asarray(s["beta"][1:]))
+
+
+def predict(model: dict, x: np.ndarray, date: pd.Timestamp) -> float:
+    """log1p cell-days for one day from the country feature vector."""
+    return float(model["clim"][min(date.dayofyear, 365) - 1] + anomaly(model, x, date))
+
+
+def point_features(feats: dict, k: int) -> np.ndarray:
+    """Feature vector (FEATS order) of point k."""
+    return np.array([float(np.asarray(feats[f], float)[k]) for f in FEATS])
 
 
 def fit(X: np.ndarray, resid: np.ndarray, season: np.ndarray, lam: float = 1.0) -> list[dict]:

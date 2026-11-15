@@ -100,7 +100,7 @@ Commands:
 | `{CC}/model.json` | `a[4]`, `b`, sigma (compute params full precision), NOAA-20 factor, method comparison, filtered industrial share (files 2000–2025), last data date, `last_complete_month` (= 2026-10, drives the "Now" panel), `preliminary` months, `coverage` (raw file dates per satellite), `annual.partial_year` (2012 interval = observed + estimated-month interval), `hotspots` flag, `hotspot_sensors` per year, `industrial_mask` stats, `area` (custom-area check, `h_month`, `h_annual`) |
 | `{CC}/recurrence/` | `meta.json` (0.01° grid, counted months, `years[mo]`, `year_round` cells = likely industrial) + `m01..m12.json` (lat, lon index at 0.01°, `n` = years with ≥1 S-NPP type-0 detection, n ≥ 2). Map mode "Recurrence" |
 | `{CC}/daily/m01..m12.json` | S-NPP cell-days per (0.1° cell, day) for one calendar month, Feb 2012 – `last_complete_month`: lat, lon index, `d` = (year − first_year) × 32 + day. Sums equal monthly VIIRS in cells.json. For month-to-date / season-to-date comparisons |
-| `{CC}/forecast.json` | next 7 days (daily Action): `issued`, `weather_state` (last POWER day), `days` [{date, value, lo, hi (80%), typical, fwi, skill}], `week` totals + skill. Only countries with a model in `live/forecast/` |
+| `{CC}/forecast.json` | next 7 days (daily Action): `issued`, `weather_state` (last POWER day), `days` [{date, value, lo, hi (80%), typical, fwi, skill}], `week` totals + skill, `points` [{lat, lon, factor[7], fwi[7]}] local weather factor per forecast point. Only countries with a model in `live/forecast/` |
 | `{CC}/live.json` | live period (from 2026-11, NOAA-20, `pipeline/live_update.py`): `first`, `last` (complete days), `gaps`, rows = cell-days: lat, lon index (0.1°), `day` since `first`, `det` detections. Site scales by `n20_factor` |
 | `{CC}/hotspots/{year}.csv` | filtered hotspots: date, time, lat, lon, sensor (Terra/Aqua/SNPP/N20), frp (for CSV export). Only PL, PT, ES, GR, UA, CL (AU/CA too big for Pages → link to FIRMS). 2026 = VIIRS only; `hotspots/live.csv` = live period, NOAA-20, through `last` |
 
@@ -204,6 +204,9 @@ Forecast ("Next 7 days" tab, country only): `pipeline/forecast_core.py` (FWI ste
 Open-Meteo past days = lead 0, today..+6 = leads 0..6 → `public/data/{CC}/forecast.json`). Skill measured by
 `forecast_skill.py` (train 2012-2023, test 2024-2025 on real archived forecasts). DC needs months of memory: never
 restart the state from start-up values (92-day spin-up error ~100 DC units). Countries without a model show a note.
+Places to watch (`src/lib/watch.ts`, "Next 7 days" tab + numbered map markers): recurrence of 0.01° cells in the area for the
+forecast months (neighbour months half weight) × local weather factor (exp of the model's weather term at each forecast
+point, `forecast.json` `points`, IDW of the 3 nearest, log space); industrial cells out; places ≥ 3 km apart. A ranking, not a probability.
 
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 

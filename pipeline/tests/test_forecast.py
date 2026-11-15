@@ -132,6 +132,8 @@ class Update(unittest.TestCase):
             self.assertLessEqual(d["lo"], d["value"])
             self.assertGreaterEqual(d["hi"], d["value"])
         self.assertEqual(out["days"][0]["skill"], 0.3)
+        self.assertEqual(len(out["points"]), 2)
+        self.assertEqual(out["points"][0]["factor"], [1.0] * 7)  # betas 0: weather changes nothing
         self.assertAlmostEqual(out["week"]["value"], round(7 * round(float(np.expm1(0.5)), 2), 1))
 
     def test_previous_runs_pick_lead_by_issue_day(self):

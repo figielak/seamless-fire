@@ -282,6 +282,8 @@ export class AreaMap {
   private ringNote = '';
   private rings = new Map<string, YearRoundCell>();
   private ringDeg = 0.01;
+  // "Places to watch" (Next 7 days tab): numbered markers.
+  private watchLayer = L.layerGroup();
 
   constructor(el: HTMLElement, private opts: AreaMapOptions) {
     this.map = L.map(el, { zoomSnap: 0.25, worldCopyJump: true, zoomControl: false });
@@ -301,9 +303,10 @@ export class AreaMap {
     this.cells.addTo(this.map);
     this.hotLayer.addTo(this.map);
     this.ringLayer.addTo(this.map);
+    this.watchLayer.addTo(this.map);
     L.control.layers(
       { Satellite: satellite, 'Street map': osm },
-      { 'Fire cells': this.cells, 'Hotspot points': this.hotLayer, 'Year-round fire': this.ringLayer },
+      { 'Fire cells': this.cells, 'Hotspot points': this.hotLayer, 'Year-round fire': this.ringLayer, 'Places to watch': this.watchLayer },
       { position: 'topright' },
     ).addTo(this.map);
     this.map.on('zoomend', () => {
@@ -388,6 +391,17 @@ export class AreaMap {
         .addTo(this.ringLayer);
     }
     this.hover(null);
+  }
+
+  /** Numbered markers of the places to watch (null = remove). Popup = `info` of each place. */
+  setWatch(places: { lat: number; lon: number; info: string }[] | null) {
+    this.watchLayer.clearLayers();
+    (places ?? []).forEach((p, i) => {
+      L.marker([p.lat, p.lon], {
+        icon: L.divIcon({ className: 'watch-pin', html: `<span>${i + 1}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+        title: `Place to watch ${i + 1}`, keyboard: true,
+      }).bindPopup(p.info).addTo(this.watchLayer);
+    });
   }
 
   private ringKey(lat: number, lon: number) {

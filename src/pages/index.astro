@@ -151,6 +151,7 @@ import Base from '../layouts/Base.astro';
           <p id="forecast-head" class="forecast-head"></p>
           <div id="forecast" class="annual"></div>
           <p class="note" id="forecast-note"></p>
+          <div id="watch" class="watch"></div>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
           <p class="unit">Months most above their usual level, in the selected period. Click a row to map it.</p>
@@ -689,6 +690,23 @@ import Base from '../layouts/Base.astro';
   .trend p {
     margin: 0.3rem 0;
   }
+  .watch h3 {
+    font-size: 1rem;
+    margin: 1rem 0 0.3rem;
+  }
+  .watch-pin span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e8432e;
+    color: #fff;
+    font: 600 12px/1 system-ui, sans-serif;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  }
   .forecast-head {
     margin: 0.2rem 0 0.4rem;
   }
@@ -995,7 +1013,8 @@ import Base from '../layouts/Base.astro';
 
 <script>
   import { dataUrl, fetchJson, loadCountry, loadDaily, type Country, type CountryData } from '../lib/data';
-  import { comparedDays, mtdStats, sameDaysHistory, seriesEnd, type LiveInfo } from '../lib/live';
+  import { addDays, comparedDays, daysInMonth, mtdStats, sameDaysHistory, seriesEnd, type LiveInfo } from '../lib/live';
+  import { factorWord, localWeather, seasonWeights, watchPlaces, type ForecastPoint } from '../lib/watch';
   import { seasonData, seasonYears } from '../lib/season';
   import { trends, type Trend } from '../lib/trend';
   import {
@@ -1030,7 +1049,7 @@ import Base from '../layouts/Base.astro';
     cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
   } from '../lib/cellmap';
   import type { Hotspot } from '../lib/map';
-  import { monthProfile, placeMonths, placesInArea, reportHtml, type Places } from '../lib/report';
+  import { mainSeason, monthProfile, monthsText, placeMonths, placesInArea, reportHtml, type Places } from '../lib/report';
   import { WORLD_CODE, mergeLayers, sumAnnual, sumSeries, unionBBox, worldModel } from '../lib/world';
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1658,7 +1677,7 @@ import Base from '../layouts/Base.astro';
 
   interface ForecastDay { date: string; value: number; lo: number; hi: number; typical: number; fwi: number; skill: number }
   interface Forecast {
-    issued: string; data_through: string; weather_state: string; days: ForecastDay[];
+    issued: string; data_through: string; weather_state: string; days: ForecastDay[]; points?: ForecastPoint[];
     week: { value: number; typical: number; lo: number; hi: number; skill: number; corr: number; corr_typical: number };
     perfect_skill: number; trained: string; tested: string; sources: string;
   }
@@ -1677,7 +1696,10 @@ import Base from '../layouts/Base.astro';
   }
 
   async function renderForecast() {
-    if (!current || !forecastEl.offsetParent) return; // hidden tab: rendered when shown
+    if (!current || (forecastEl.closest('.tab') as HTMLElement).hidden) {
+      areaMap?.setWatch(null); // markers belong to the open tab and the current area
+      return; // hidden tab: rendered when shown
+    }
     const token = ++forecastToken;
     const { country } = current;
     const head = $('forecast-head');
@@ -1689,7 +1711,10 @@ import Base from '../layouts/Base.astro';
       head.textContent = '';
       note.innerHTML = msg;
     };
-    if (country.code === WORLD_CODE) return clear('The forecast is made per country: choose one country.');
+    if (country.code === WORLD_CODE) {
+      void renderWatch(null);
+      return clear('The forecast is made per country: choose one country.');
+    }
     let f: Forecast | null = null;
     try {
       f = await loadForecast(country.code);
@@ -1700,6 +1725,7 @@ import Base from '../layouts/Base.astro';
     }
     if (token !== forecastToken || !current) return;
     if (!f) {
+      void renderWatch(null);
       return clear(`No forecast for ${escapeHtml(country.name)}: its fire weather model did not pass the check against real
         weather forecasts (in Australia and Canada one weather average for a whole continent explains little of the daily fire activity).`);
     }
@@ -1758,6 +1784,90 @@ import Base from '../layouts/Base.astro';
       day 1 ${sk[0]}, day 3 ${sk[2]}, day 5 ${sk[4]}, day 7 ${sk[6]}${f.week.skill < 0.1 ? '; the 7-day total adds little to the typical level here' : ''}.
       Weather: NASA POWER (fire weather state to ${f.weather_state}) and forecasts from
       <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).`;
+    void renderWatch(f);
+  }
+
+  // Places to watch: recurrence at this time of year × local fire weather (src/lib/watch.ts).
+  let watchToken = 0;
+
+  async function renderWatch(f: Forecast | null) {
+    const el = $('watch');
+    const token = ++watchToken;
+    if (!current || current.country.code === WORLD_CODE) {
+      el.innerHTML = '';
+      areaMap?.setWatch(null);
+      return;
+    }
+    const { country, d } = current;
+    const info = d.model.live as LiveInfo | undefined;
+    const lastDay = info?.last ?? `${d.model.last_complete_month}-${daysInMonth(d.model.last_complete_month)}`;
+    const days = f ? f.days.map((x) => x.date) : Array.from({ length: 7 }, (_, i) => addDays(lastDay, i + 1));
+    const weights = seasonWeights(days);
+    const shape = resolveShape(state.area);
+    const label = areaLabel(state.area) ?? country.name;
+    el.innerHTML = '<p class="note">Finding places to watch…</p>';
+    try {
+      const meta = await loadRec<RecurrenceMeta>(`${country.code}/recurrence/meta.json`);
+      const months = await Promise.all([...weights.keys()].map(async (cal) => ({
+        cal, data: await loadRec<RecurrenceMonth>(`${country.code}/recurrence/m${String(cal + 1).padStart(2, '0')}.json`),
+      })));
+      if (token !== watchToken || !current) return;
+      const pts = f?.points ?? null;
+      const places = watchPlaces(meta, months, weights, shape ? keepFn(shape) : null, pts, 10);
+      const cals = [...weights.keys()].sort((a, b) => a - b);
+      // months in time order (a window across the new year: Dec before Jan)
+      const ordered = cals.some((c) => c === 0) && cals.some((c) => c === 11)
+        ? [...cals.filter((c) => c >= 6), ...cals.filter((c) => c < 6)] : cals;
+      const season = `${MONTHS[ordered[0]]}–${MONTHS[ordered[ordered.length - 1]]}`;
+      const plural = (c: number) => (c === 2 ? 'Marches' : `${MONTHS_LONG[c]}s`);
+      // weather around the area: at the centre of the area (or of the country)
+      const [w0, s0, e0, n0] = shape ? shapeBBox(shape) : country.bbox;
+      const lw = pts ? localWeather(pts, (s0 + n0) / 2, (w0 + e0) / 2) : null;
+      const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+      const wxLine = lw
+        ? `Fire weather around ${escapeHtml(label)} in these 7 days: <b>${factorWord(mean(lw.factor))}</b>
+           (×${mean(lw.factor).toFixed(2)} the usual activity for the season; mean FWI ${mean(lw.fwi).toFixed(1)}).`
+        : `No fire weather forecast for ${escapeHtml(country.name)}: places are ranked by history only.`;
+      const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(3)}° ${v < 0 ? neg : pos}`;
+      const osm = (p: { lat: number; lon: number }) =>
+        `https://www.openstreetmap.org/?mlat=${p.lat.toFixed(4)}&mlon=${p.lon.toFixed(4)}#map=15/${p.lat.toFixed(4)}/${p.lon.toFixed(4)}`;
+      const main = mainSeason(monthProfile(current.h, 0, current.h.value.length - 1).share);
+      if (!places.length) {
+        el.innerHTML = `<h3>Places to watch in ${escapeHtml(label)}</h3><p>${wxLine}</p>
+          <p>No ~1 km cell here had vegetation fire in 2 or more years in ${season} (VIIRS, since 2012): fire is rare
+          here at this time of year.${main ? ` The main fire months in ${escapeHtml(label)} are <b>${monthsText(main.months)}</b>
+          (${Math.round(main.share * 100)}% of the yearly activity).` : ''}</p>`;
+        areaMap?.setWatch(null);
+        return;
+      }
+      const rows = places.map((p, i) => `<tr><td>${i + 1}</td>
+          <td><a href="${osm(p)}" target="_blank" rel="noopener">${deg(p.lat, 'N', 'S')}, ${deg(p.lon, 'E', 'W')}</a></td>
+          <td>${Math.round(p.recurrence * 100)}%</td>
+          <td>${p.factor === null ? '–' : `×${p.factor.toFixed(2)}`}</td></tr>`).join('');
+      el.innerHTML = `<h3>Places to watch in ${escapeHtml(label)}, ${shortDay(days[0])}–${shortDay(days[days.length - 1])}</h3>
+        <p>${wxLine}</p>
+        <div class="table-wrap"><table class="anom"><thead><tr><th>#</th><th>Place (~1 km cell)</th>
+          <th>Years with fire, ${season}</th><th>Weather</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="note">Ranked by how often vegetation fire happened in the cell at this time of year (share of years,
+          ${season}; the months next to the forecast days count half; VIIRS S-NPP, since 2012)
+          ${pts ? '× the local fire weather of these 7 days (×1 = usual for the season; nearest forecast points)' : ''}.
+          Year-round fire (likely industrial) is left out. A ranking of places to watch, not a probability of fire.
+          Numbers match the markers on the map.</p>`;
+      areaMap?.setWatch(places.map((p, i) => ({
+        lat: p.lat, lon: p.lon,
+        info: `<b>Place to watch ${i + 1}</b><br>` + p.byMonth.map((m) => `Fire in ${m.years} of ${m.of} ${plural(m.cal)}`).join('<br>') + ' (VIIRS)' +
+          (p.factor !== null ? `<br>Fire weather next 7 days: ×${p.factor.toFixed(2)} usual, FWI ${p.fwi!.toFixed(1)}` : '') +
+          `<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°`,
+      })));
+    } catch (err) {
+      console.error(err);
+      if (token === watchToken) el.innerHTML = '<p class="note">Places to watch could not be loaded.</p>';
+    }
+  }
+
+  function shortDay(iso: string): string {
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
   }
 
   // ------------------------------------------------------------------ anomalies
@@ -2180,6 +2290,7 @@ import Base from '../layouts/Base.astro';
       if (t.dataset.tab === 'calendar') rerenderCalendar();
       if (t.dataset.tab === 'season') void renderSeason();
       if (t.dataset.tab === 'forecast') void renderForecast();
+      else areaMap?.setWatch(null);
       resizeCharts();
     }));
     const left = $('panel-left');

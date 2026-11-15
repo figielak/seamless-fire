@@ -38,6 +38,7 @@ PREVIOUS_RUNS = "https://previous-runs-api.open-meteo.com/v1/forecast"
 COVERAGE = ROOT / "live" / "coverage.json"
 DAYS = 7  # issue day .. issue day + 6
 Z80 = 1.2816
+FACTOR_MIN, FACTOR_MAX = 0.05, 20.0  # local weather factor, clipped (extreme z-scores at single points)
 
 
 def write_if_changed(path, text: str) -> bool:
@@ -164,11 +165,20 @@ def forecast(code: str, today: date) -> None:
             "typical": round(float(np.expm1(max(c, 0))), 2), "fwi": round(float(x[C.FEATS.index("fwi")]), 1),
             "skill": model["skill"][j],
         })
+    # Local weather factor per point and day: exp(weather term) of the point's own weather, i.e. how many
+    # times the usual fire activity for the season this weather implies (site: places to watch).
+    fdays = [i for i, d in enumerate(days) if d >= pd.Timestamp(today)]
+    points = []
+    for k, (la, lo) in enumerate(model["points"]):
+        fac = [float(np.clip(np.exp(C.anomaly(model, C.point_features(feats[i], k), days[i])), FACTOR_MIN, FACTOR_MAX))
+               for i in fdays]
+        points.append({"lat": la, "lon": lo, "factor": [round(f, 3) for f in fac],
+                       "fwi": [round(float(np.asarray(feats[i]["fwi"])[k]), 1) for i in fdays]})
     tot = sum(d["value"] for d in out_days)
     typ = sum(d["typical"] for d in out_days)
     hw = Z80 * model["week"]["resid_sd_log"]
     out = {
-        "issued": str(today), "data_through": str(yesterday), "weather_state": state["date"], "days": out_days,
+        "issued": str(today), "data_through": str(yesterday), "weather_state": state["date"], "days": out_days, "points": points,
         "week": {"value": round(tot, 1), "typical": round(typ, 1),
                  "lo": round(float(np.expm1(max(np.log1p(tot) - hw, 0))), 1),
                  "hi": round(float(np.expm1(np.log1p(tot) + hw)), 1),
