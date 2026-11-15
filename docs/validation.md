@@ -501,10 +501,17 @@ a lead-0 correction alone gave a false skill of −0.53 on day 7 in PT). Skill =
 | Day ahead | 1 | 2 | 3 | 4 | 5 | 6 | 7 | observed weather | 7-day total, corr (climatology) |
 |---|---|---|---|---|---|---|---|---|---|
 | PT | 0.32 | 0.30 | 0.29 | 0.27 | 0.22 | 0.18 | 0.18 | 0.41 | 0.76 (0.37) |
+| ES | 0.26 | 0.24 | 0.25 | 0.22 | 0.20 | 0.14 | 0.08 | 0.30 | 0.66 (0.42) |
+| UA | 0.19 | 0.16 | 0.12 | 0.09 | 0.09 | 0.05 | −0.01 | 0.21 | 0.91 (0.88) |
 | PL | 0.15 | 0.23 | 0.21 | 0.21 | 0.14 | 0.12 | 0.04 | 0.25 | 0.79 (0.76) |
+| GR | −0.02 | −0.04 | −0.06 | −0.07 | −0.13 | −0.17 | −0.18 | 0.03 | 0.71 (0.44) |
+| CL | n/a | | | | | | | 0.09 | 0.68 (0.63) |
 
-Portugal keeps most of the upper bound for 6 days; in Poland the gain is small and the 7-day total adds nothing
-to the seasonal level. ES, GR, UA, CL: measurement running (free API rate limits); AU, CA: no forecast.
+Forecast on the site: **PT, ES, UA, PL** (positive skill on days 1–6). Portugal and Spain keep most of the upper bound
+for several days; in Poland and Ukraine the gain is smaller and the 7-day total adds little to the seasonal level.
+Greece fails: even observed weather adds almost nothing in the 2024–2025 test years (the 2012–2025 LOYO bound was
+0.44 R², so the relation changed or two test years are too few). Chile: the daily skill could not be computed (gaps in
+the archived forecasts) and the upper bound is low (0.09). AU, CA: no forecast (one weather average per continent).
 
 **Operation.** DC carries months of memory: restarting the codes 92 days before a day from start-up values
 leaves DC wrong by 86–106 units on average, so the state per point is stored (`live/forecast/state_{CC}.json`)

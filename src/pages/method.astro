@@ -192,8 +192,10 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
     </div>
     <p class="note">
       Cells: annual error · monthly log-RMSE (0.10 ≈ ±10%, 0.43 ≈ a factor of 1.5, 1.1 ≈ a factor of 3).
-      The log-log model wins everywhere, often by a factor of 2 in monthly error: the relation is not
-      proportional (<i>b</i> &lt; 1), VIIRS gains relatively more in quiet months with small fires.
+      The log-log model has the lowest monthly error in every country, often by a factor of 2: the relation is not
+      proportional (<i>b</i> &lt; 1), VIIRS gains relatively more in quiet months with small fires. For annual
+      totals the month ratio (C) is close and slightly better in PT, GR, UA and CA; the calendar needs good months,
+      so the monthly error decides.
       E is chosen only when it beats D by more than 0.01 log-RMSE (rule fixed before the results).
       Backtest: fitted on 2019–2025, signed annual error on 2012–2018.
     </p>
@@ -296,8 +298,9 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
         S-NPP outage Jul–Aug 2022. These months are marked and left out of calibration and statistics.</li>
       <li><b>Preliminary months.</b> August–October 2026 use near real-time data without the FIRMS type
         field; they are marked and may change.</li>
-      <li><b>After S-NPP.</b> S-NPP data end on 2 November 2026; NOAA-20 will continue the series with a
-        factor of 0.92–0.98 (stored, not yet needed).</li>
+      <li><b>After S-NPP.</b> S-NPP data end on 2 November 2026; from November 2026 the series continues
+        with NOAA-20 near real-time data, scaled to S-NPP by a per-country factor of 0.92–0.98 (ratio over 2018–2025).
+        These days are preliminary.</li>
       <li><b>Custom areas</b> carry much wider intervals than countries, especially before 2012.</li>
     </ul>
   </section>

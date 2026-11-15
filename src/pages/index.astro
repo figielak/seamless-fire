@@ -1726,8 +1726,9 @@ import Base from '../layouts/Base.astro';
     if (token !== forecastToken || !current) return;
     if (!f) {
       void renderWatch(null);
-      return clear(`No forecast for ${escapeHtml(country.name)}: its fire weather model did not pass the check against real
-        weather forecasts (in Australia and Canada one weather average for a whole continent explains little of the daily fire activity).`);
+      return clear(`No forecast for ${escapeHtml(country.name)}: its fire weather model did not beat the seasonal normal when
+        tested on real archived weather forecasts (2024–2025), so it is not shown. In Australia and Canada one weather average
+        for a whole continent explains little of the daily fire activity. Places to watch below use the fire history only.`);
     }
     forecastEl.hidden = false;
     const label = (iso: string) => {

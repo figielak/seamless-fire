@@ -2,89 +2,89 @@
  "PL": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "PT": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "ES": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "GR": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "UA": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "AU": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "CA": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  },
  "CL": {
   "sensor": "N20",
   "first": "2026-11-01",
-  "last": "2026-11-13",
+  "last": "2026-11-14",
   "gaps": [],
   "sources": [
    "FIRMS country file (local seed)",
    "FIRMS NOAA-20 VIIRS NRT global 7d"
   ],
-  "updated": "2026-11-14T17:23Z"
+  "updated": "2026-11-15T07:37Z"
  }
 }
