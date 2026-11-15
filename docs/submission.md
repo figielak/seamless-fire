@@ -15,15 +15,15 @@ Seamless Fire
 ## High-Level Project Summary
 
 Seamless Fire is a burning activity calendar for any area, from 2000 to today, on one consistent
-scale. MODIS (2000 on) and VIIRS (2012 on) see fire differently, so joining their records creates a
-false jump in 2012. We harmonize them with a per-country, per-season model, validated year by year
-against the years both sensors flew, and we remove industrial heat sources that would otherwise make
-up three quarters of Polish VIIRS "fires". The web app lets emergency managers, land managers and
-firefighters pick a country, a preset, a rectangle or a polygon drawn on the map, and see which months
-and years burned most, how the current month compares with the same days in earlier years, long-term
-trends, and where fires come back year after year at ~1 km, with the nearest town named. Recent days
-come from NASA FIRMS near real-time feeds; the data download as CSV with a column guide and the area
-outline, or as a one-file area report.
+scale. MODIS (from 2000) and VIIRS (from 2012) see fire differently, so joining their records creates
+a false jump in 2012. We harmonize them with a per-country, per-season model, validated year by year
+on the years both sensors flew, and we remove industrial heat sources that would otherwise make up
+three quarters of Polish VIIRS "fires". Emergency managers, land managers and firefighters pick a
+country, a preset, a rectangle or a polygon drawn on the map, and see which months and years burned
+most, how the current month compares with the same days in earlier years, long-term trends, and where
+fires return year after year at ~1 km. A 7-day fire weather outlook ranks the places to watch, each
+named by the nearest town. Recent days come from NASA FIRMS near real-time data; everything downloads
+as CSV with a column guide and the area outline, or as a one-file area report.
 
 ## Link to Project Demo
 

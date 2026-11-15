@@ -25,7 +25,11 @@ const onMethod = Astro.url.pathname.replace(/\/?$/, '/').endsWith('/method/');
         <a href={base} aria-current={onMethod ? undefined : 'page'}>Calendar</a>
         <a href={`${base}method/`} aria-current={onMethod ? 'page' : undefined}>Method</a>
       </nav>
-      <slot name="header" />
+      <div class="header-right">
+        <slot name="header" />
+        <a class="ext" href={`${base}seamless-fire-demo.pdf`} target="_blank" rel="noopener" title="7-slide demo (PDF)">Slides (PDF)</a>
+        <a class="ext" href="https://github.com/figielak/seamless-fire" target="_blank" rel="noopener" title="Source code on GitHub">GitHub</a>
+      </div>
     </header>
     <main>
       <slot />
@@ -99,6 +103,23 @@ const onMethod = Astro.url.pathname.replace(/\/?$/, '/').endsWith('/method/');
     color: rgba(255, 255, 255, 0.78);
     text-decoration: none;
     border-bottom: 3px solid transparent;
+  }
+  header.site .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    align-self: center;
+  }
+  header.site .ext {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.88rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  header.site .ext:hover {
+    color: #fff;
+    text-decoration: underline;
   }
   header.site nav a:hover {
     color: #fff;
