@@ -4,7 +4,7 @@ Texts for the NASA Space Apps Challenge 2026 project page, one section per form 
 Challenge: Harmonization of MODIS and VIIRS Hot Spots. Team: Lone Pixel. Local event: Rzeszów.
 
 Before submitting: replace `[FULL NAME]`; check every link in a private window; add the optional
-forecast paragraph only if the forecast is live on the site.
+forecast paragraph (now live) only while the daily forecast keeps running.
 
 ---
 
@@ -83,19 +83,19 @@ told apart from vegetation fires.
 
 **Tools.** Python (pandas, numpy) computes all data; an Astro static site with TypeScript, Plotly and
 Leaflet displays it (no server); GitHub Actions and GitHub Pages update and host it. The TypeScript
-harmonization is tested against the Python reference (120 automated tests in total).
+harmonization is tested against the Python reference (140 automated tests in total).
 
 **Limitations.** Cell-days measure how widespread fire activity was, not burned area or the impact of
 one fire; very large fires saturate. 2000–2011 values are estimates with an interval; in some countries
 (Portugal most) the relation between the sensors drifts over time. Near real-time data are preliminary.
 All evidence: `docs/validation.md` in the repository.
 
-<!-- OPTIONAL, only if the forecast is live:
-**Forecast.** A 7-day outlook of fire activity from the Canadian Fire Weather Index computed from weather
-forecasts. Weather explains about half of the day-to-day fire activity beyond the seasonal cycle
-(validated on 2012–2025); the outlook shows expected activity against the normal for the season, with its
-measured skill per lead day.
--->
+**Forecast and places to watch.** A 7-day outlook of fire activity per country from the Canadian Fire Weather
+Index, computed from NASA POWER weather history and Open-Meteo forecasts and updated daily. Its skill was measured
+on real archived weather forecasts of 2024–2025 (Portugal: 32% better than the seasonal normal on day 1, 18% on
+day 7) and is shown next to the outlook. For the selected area, "Places to watch" ranks the ~1 km cells where
+vegetation fire happened most often at this time of year, weighted by the local fire weather of the coming days
+(a ranking for patrols and prevention, not a probability).
 
 ## Use of Artificial Intelligence (AI)
 
