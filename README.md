@@ -136,6 +136,9 @@ Deployment: every push to `main` builds the site and publishes it on GitHub Page
   licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Natural Earth** 1:10m Admin 0 countries (public domain), used to assign near real-time points to
   countries. <https://www.naturalearthdata.com/>
+- **GeoNames** populated places (`cities1000`), region and country names, licensed under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): nearest town or village for the places to watch
+  (`pipeline/places.py` → `public/data/{CC}/places.json`). <https://www.geonames.org/>
 - **EFFIS** national statistics, used only for an independent check of 2000–2011: San-Miguel-Ayanz, J.
   et al., *Forest Fires in Europe, Middle East and North Africa 2024*, European Commission JRC,
   [doi:10.2760/0649290](https://dx.doi.org/10.2760/0649290). The data file is not redistributed here.

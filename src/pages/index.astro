@@ -737,6 +737,15 @@ import Base from '../layouts/Base.astro';
   .watch-table:not(.all) tr.more {
     display: none;
   }
+  .watch .near {
+    font-weight: 600;
+  }
+  .watch .near-reg {
+    color: var(--muted);
+  }
+  .watch .near-ll {
+    font-size: 0.8rem;
+  }
   .watch-more {
     margin: 0.3rem 0;
     font-size: 0.85rem;
@@ -1137,6 +1146,7 @@ import Base from '../layouts/Base.astro';
   import { exportHotspots, hotspotFiles, monthlyCsv } from '../lib/csv';
   import { areaGeoJson, exportReadme } from '../lib/exportdoc';
   import { zipFiles } from '../lib/zip';
+  import { nearestPlace, placeText, type PlaceNames } from '../lib/placenames';
   import {
     cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
   } from '../lib/cellmap';
@@ -1934,6 +1944,8 @@ import Base from '../layouts/Base.astro';
       const months = await Promise.all([...weights.keys()].map(async (cal) => ({
         cal, data: await loadRec<RecurrenceMonth>(`${country.code}/recurrence/m${String(cal + 1).padStart(2, '0')}.json`),
       })));
+      // Place names are a convenience: without them the table shows coordinates only.
+      const names = await loadRec<PlaceNames>(`${country.code}/places.json`).catch(() => null);
       if (token !== watchToken || !current) return;
       const pts = f?.points ?? null;
       const places = watchPlaces(meta, months, weights, shape ? keepFn(shape) : null, pts, 10);
@@ -1963,20 +1975,22 @@ import Base from '../layouts/Base.astro';
         areaMap?.setWatch(null);
         return;
       }
+      const near = places.map((p) => (names ? nearestPlace(names, p.lat, p.lon) : null));
       const rows = places.map((p, i) => `<tr${i >= 3 ? ' class="more"' : ''}><td>${i + 1}</td>
-          <td><a href="${osm(p)}" target="_blank" rel="noopener">${deg(p.lat, 'N', 'S')}, ${deg(p.lon, 'E', 'W')}</a></td>
+          <td>${near[i] ? `<span class="near">${escapeHtml(placeText(near[i]!))}</span>${near[i]!.region
+            ? `<span class="near-reg">, ${escapeHtml(near[i]!.region)}</span>` : ''}<br>` : ''}<a href="${osm(p)}" target="_blank" rel="noopener" class="near-ll">${deg(p.lat, 'N', 'S')}, ${deg(p.lon, 'E', 'W')}</a></td>
           <td>${Math.round(p.recurrence * 100)}%</td>
           <td>${p.factor === null ? '–' : `×${p.factor.toFixed(2)}`}</td></tr>`).join('');
       el.innerHTML = `<h3>Places to watch in ${escapeHtml(label)}, ${shortDay(days[0])}–${shortDay(days[days.length - 1])}</h3>
         <p class="watch-lead"><b>A ranking of places to watch, not a probability of fire.</b> Numbers match the markers on the map.</p>
-        <div class="table-wrap"><table class="anom watch-table"><thead><tr><th>#</th><th>Place (~1 km cell, opens the map)</th>
+        <div class="table-wrap"><table class="anom watch-table"><thead><tr><th>#</th><th>Place (~1 km cell; nearest town, coordinates open the map)</th>
           <th>Years with fire, ${season}</th><th>Weather</th></tr></thead><tbody>${rows}</tbody></table></div>
         ${places.length > 3 ? `<button type="button" class="watch-more" aria-expanded="false">Show all ${places.length} places</button>` : ''}
         <p>${wxLine}</p>
         <p class="note">Ranked by how often vegetation fire happened in the cell at this time of year (share of years,
           ${season}; the months next to the forecast days count half; VIIRS S-NPP, since 2012)
           ${pts ? '× the local fire weather of these 7 days (×1 = usual for the season; nearest forecast points)' : ''}.
-          Year-round fire (likely industrial) is left out.</p>`;
+          Year-round fire (likely industrial) is left out.${names ? ' Nearest town or village (1000+ people): <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0); distance and direction from it.' : ''}</p>`;
       el.querySelector<HTMLButtonElement>('.watch-more')?.addEventListener('click', (e) => {
         const b = e.currentTarget as HTMLButtonElement;
         const open = el.querySelector('.watch-table')!.classList.toggle('all');
@@ -1985,7 +1999,7 @@ import Base from '../layouts/Base.astro';
       });
       areaMap?.setWatch(places.map((p, i) => ({
         lat: p.lat, lon: p.lon,
-        info: `<b>Place to watch ${i + 1}</b><br>` + p.byMonth.map((m) => `Fire in ${m.years} of ${m.of} ${plural(m.cal)}`).join('<br>') + ' (VIIRS)' +
+        info: `<b>Place to watch ${i + 1}</b>${near[i] ? `<br>${escapeHtml(placeText(near[i]!))}${near[i]!.region ? `, ${escapeHtml(near[i]!.region)}` : ''}` : ''}<br>` + p.byMonth.map((m) => `Fire in ${m.years} of ${m.of} ${plural(m.cal)}`).join('<br>') + ' (VIIRS)' +
           (p.factor !== null ? `<br>Fire weather next 7 days: ×${p.factor.toFixed(2)} usual, FWI ${p.fwi!.toFixed(1)}` : '') +
           `<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°`,
       })), `Numbered: places to watch, ${shortDay(days[0])}–${shortDay(days[days.length - 1])} (forecast week)`);

@@ -26,7 +26,7 @@ Updated: 2026-11-15
   before/after 2012 Plotly chart (country select, `#CC` hash). Live and checked.
 - Season profile and briefing **dropped** (user decision, time).
 - Logic: `src/lib/harmonize.ts`, `stats.ts`, `geo.ts`, `csv.ts`, `cellmap.ts`
-- Tests: `python -m unittest discover -s pipeline/tests` (36), `npm run test:site` (101), `npm run check` (0 errors)
+- Tests: `python -m unittest discover -s pipeline/tests` (36), `npm run test:site` (103), `npm run check` (0 errors)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`)
 
