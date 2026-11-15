@@ -95,8 +95,8 @@ import Base from '../layouts/Base.astro';
           <summary>Download</summary>
           <button type="button" id="dl-report" class="primary-dl" title="One HTML file: summary, calendar, season, trend, unusual months and places where fire comes back. Opens in any browser; print it to PDF.">Area report (HTML)</button>
           <div class="row">
-            <button type="button" id="dl-monthly">Monthly series (CSV)</button>
-            <button type="button" id="dl-hotspots">Hotspots (CSV)</button>
+            <button type="button" id="dl-monthly" title="ZIP: monthly CSV + README.txt (columns, units, flags) + area.geojson">Monthly series (CSV)</button>
+            <button type="button" id="dl-hotspots" title="ZIP: hotspot CSV + README.txt (columns, units, UTC times) + area.geojson">Hotspots (CSV)</button>
             <button type="button" id="dl-cancel" hidden>Cancel</button>
           </div>
           <span id="dl-status" class="status" role="status"></span>
@@ -1135,6 +1135,8 @@ import Base from '../layouts/Base.astro';
   } from '../lib/geo';
   import { monthStats, topAnomalies } from '../lib/stats';
   import { exportHotspots, hotspotFiles, monthlyCsv } from '../lib/csv';
+  import { areaGeoJson, exportReadme } from '../lib/exportdoc';
+  import { zipFiles } from '../lib/zip';
   import {
     cellLayer, recurrenceLayer, yearRoundCells, type RecurrenceMeta, type RecurrenceMonth, type YearRoundCell,
   } from '../lib/cellmap';
@@ -2045,7 +2047,7 @@ import Base from '../layouts/Base.astro';
 
   // ------------------------------------------------------------------ export
 
-  function download(name: string, text: string, type = 'text/csv;charset=utf-8') {
+  function download(name: string, text: BlobPart, type = 'text/csv;charset=utf-8') {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a');
     a.href = url;
@@ -2056,9 +2058,43 @@ import Base from '../layouts/Base.astro';
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /**
+   * Saves a CSV as a ZIP with README.txt (columns, units, time zone, area, data date) and
+   * area.geojson, so the file can be read and the area rebuilt outside the site.
+   * `snap` = state captured when the export started.
+   */
+  function downloadBundle(kind: 'monthly' | 'hotspots', csvName: string, csv: string, rows: number,
+    snap: { country: Country; d: CountryData; area: AreaSpec; from: string; to: string; href: string }) {
+    const { country, d, area } = snap;
+    const world = country.code === WORLD_CODE;
+    const info = d.model.live as LiveInfo | undefined;
+    const shape = world ? null : resolveShape(area);
+    const features = world
+      ? countries.filter((c) => c.code !== WORLD_CODE).map((c) => ({ name: c.name, shape: null, bbox: c.bbox }))
+      : [{ name: areaLabel(area) ?? country.name, shape, bbox: shape ? shapeBBox(shape) : country.bbox }];
+    const readme = exportReadme({
+      kind, csvName, rows,
+      country: country.name,
+      area: areaNoteText(country, area),
+      isArea: !!shape,
+      from: snap.from, to: snap.to,
+      created: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+      dataThrough: info?.last ?? `${d.model.last_complete_month}-${daysInMonth(d.model.last_complete_month)}`,
+      lastComplete: d.model.last_complete_month,
+      model: world ? 'per country (each country with its own model, then summed)' : `variant ${d.model.model}`,
+      viewUrl: snap.href,
+      methodUrl: new URL(`${import.meta.env.BASE_URL}method/`, location.origin).href,
+    });
+    const zip = zipFiles([
+      { name: csvName, text: csv },
+      { name: 'README.txt', text: readme },
+      { name: 'area.geojson', text: areaGeoJson(features) },
+    ]);
+    download(csvName.replace(/\.csv$/, '.zip'), zip, 'application/zip');
+  }
+
   /** How the area of the report is defined (one sentence). */
-  function areaNoteText(country: Country): string {
-    const a = state.area;
+  function areaNoteText(country: Country, a: AreaSpec = state.area): string {
     const f = (v: number) => v.toFixed(3);
     if (country.code === WORLD_CODE) return 'Area: all eight countries, each harmonized with its own model, then summed.';
     if (a.kind === 'country') return `Area: ${country.name}, whole country (FIRMS country files; near real-time points assigned with Natural Earth borders).`;
@@ -2165,7 +2201,8 @@ import Base from '../layouts/Base.astro';
     dlNote.textContent =
       'Hotspots are filtered by their own coordinates, the series by 0.1° cell centers, so counts can differ ' +
       'slightly at the area edge. Hotspots are vegetation fires only (industrial sources removed); ' +
-      '2026 has VIIRS only.';
+      '2026 has VIIRS only. CSV downloads come as a ZIP with README.txt (column guide, units, UTC times) ' +
+      'and area.geojson (the area outline).';
   }
 
   async function startHotspotExport() {
@@ -2179,6 +2216,7 @@ import Base from '../layouts/Base.astro';
     const keep = shape ? keepFn(shape) : null;
     const files = hotspotFiles(d.model, from, to);
     const name = `seamless-fire_${country.code}_${areaSlug(state.area)}_${from}_${to}_hotspots.csv`;
+    const snap = { country, d, area: state.area, from, to, href: location.href };
     const job = new AbortController();
     exportJob = job;
     dlHotspots.disabled = true;
@@ -2196,7 +2234,7 @@ import Base from '../layouts/Base.astro';
           dlStatus.textContent = `Hotspots: file ${done} of ${total}, ${rows.toLocaleString('en-US')} rows…`;
         },
       });
-      download(name, res.csv);
+      downloadBundle('hotspots', name, res.csv, res.rows, snap);
       dlStatus.textContent = `Saved ${res.rows.toLocaleString('en-US')} hotspots.`;
     } catch (err) {
       if (job.signal.aborted) dlStatus.textContent = 'Hotspot download cancelled, no file saved.';
@@ -2812,10 +2850,12 @@ import Base from '../layouts/Base.astro';
       if (!current) return;
       const { d, country, h, fromIdx, toIdx } = current;
       const first = monthAbs(h.firstMonth);
-      download(
-        `seamless-fire_${country.code}_${areaSlug(state.area)}_${monthStr(first + fromIdx)}_${monthStr(first + toIdx)}_monthly.csv`,
-        monthlyCsv(h, d.model, fromIdx, toIdx),
-      );
+      const from = monthStr(first + fromIdx);
+      const to = monthStr(first + toIdx);
+      downloadBundle('monthly', `seamless-fire_${country.code}_${areaSlug(state.area)}_${from}_${to}_monthly.csv`,
+        monthlyCsv(h, d.model, fromIdx, toIdx), toIdx - fromIdx + 1,
+        { country, d, area: state.area, from, to, href: location.href });
+      dlStatus.textContent = 'Saved: ZIP with the CSV, README.txt (column guide) and area.geojson.';
     });
     dlHotspots.addEventListener('click', startHotspotExport);
     dlReport.addEventListener('click', () => void startReport());

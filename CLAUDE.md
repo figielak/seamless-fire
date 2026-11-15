@@ -162,7 +162,7 @@ Main page (required): country select, rectangle inputs (W, S, E, N), presets
 (Podkarpacie, Biebrza, Algarve – verify coordinates), date range (month/year),
 calendar heatmap years × months (cividis, log color scale, 2000–2011 marked as estimated,
 preliminary months marked), "Now" panel (latest month vs median, spread, percentile),
-top 10 anomalies, CSV export (monthly series + hotspots in area and date range).
+top 10 anomalies, CSV export (monthly series + hotspots in area and date range; each a ZIP with README.txt and area.geojson, `src/lib/exportdoc.ts`, `zip.ts`).
 
 Then: raw/harmonized toggle, annual chart with uncertainty, season profile,
 template-based area briefing (no AI), "Method" page (method comparison, before/after 2012,
