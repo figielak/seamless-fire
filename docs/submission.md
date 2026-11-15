@@ -27,7 +27,7 @@ outline, or as a one-file area report.
 
 ## Link to Project Demo
 
-https://github.com/figielak/seamless-fire/blob/main/docs/seamless-fire-demo.pdf
+https://figielak.github.io/seamless-fire/seamless-fire-demo.pdf
 
 ## Link to Final Project
 
