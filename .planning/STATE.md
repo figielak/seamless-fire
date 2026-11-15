@@ -3,7 +3,7 @@
 Short, current snapshot. Overwrite sections, do not append history here.
 Method, data contract and work order live in `CLAUDE.md` and `docs/plan.md`; do not copy them.
 
-Updated: 2026-11-15 ~10:15
+Updated: 2026-11-15 ~10:25
 
 ## Where we are
 
@@ -18,7 +18,7 @@ Updated: 2026-11-15 ~10:15
 - Exports: monthly and hotspot CSV download as ZIP + README.txt + area.geojson (`src/lib/exportdoc.ts`, `zip.ts`).
 - Places to watch name the nearest GeoNames town (`pipeline/places.py` → `public/data/{CC}/places.json`, 1.3 MB total;
   raw files in `data/geonames/`).
-- Near real-time data: refreshed by hand (`live_update.py`, then `forecast_update.py`), last run 2026-11-15 ~10:10:
+- Near real-time data: refreshed by hand (`live_update.py`, then `forecast_update.py`), last runs 2026-11-15 ~10:10 and ~10:21 (second: FIRMS file unchanged, nothing to commit):
   fire data through 2026-11-14, forecasts ES/PL/PT/UA issued 2026-11-15 for 15–21 Nov (POWER state 2026-11-12).
 - `docs/submission.md` updated with all of the above (summary 942 characters).
 - Tests: `python -m unittest discover -s pipeline/tests` (45), `npm run test:site` (103), `npm run check` (0 errors)
@@ -27,7 +27,7 @@ Updated: 2026-11-15 ~10:15
 
 ## Next step
 
-- Before 13:00: optionally refresh NRT data once more (15 Nov becomes complete in FIRMS only later); fill
+- Before 13:00: optionally refresh NRT data once more around 12:30 (15 Nov becomes complete in FIRMS only later); fill
   `[FULL NAME]` and the demo link in `docs/submission.md`; check links in a private window.
 - UX review: all 12 points addressed (preliminary marker fixed: orange, was default green).
 - Known limit: `live/nrt/{CC}.csv` and `live.json` grow every day (AU ~8k rows/day in season). Every few months rebuild
