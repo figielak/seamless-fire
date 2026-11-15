@@ -7,6 +7,7 @@
 // - percentile: same calendar month in all years of the series (low-quality and preliminary
 //   months left out, the month itself always included), ties as mid-rank
 // - fewer than MIN_REF_YEARS reference values -> anomaly is null ("not enough history")
+// - top anomalies rank estimated months by the lower end of their ~80% interval (see topAnomalies)
 
 import { monthAbs, monthStr, type Harmonized } from './harmonize.ts';
 
@@ -116,11 +117,18 @@ export interface Anomaly extends MonthStats {
   estimated: boolean;
   lowQuality: boolean;
   preliminary: boolean;
+  // Ranking key: the anomaly the ~80% interval supports. Observed months: = ratio.
+  // Estimated months (before VIIRS): (lo + k) / (median + k), the lower end of the interval.
+  rankRatio: number;
 }
 
 /**
- * Months in [fromIdx, toIdx] with the highest anomaly ratio. Statistics always use the full
- * history (the range only limits which months are ranked). Months without enough history skip.
+ * Months in [fromIdx, toIdx] with the highest supported anomaly (`rankRatio`). Statistics always
+ * use the full history (the range only limits which months are ranked). Months without enough
+ * history skip. Estimated months rank by the lower end of their interval (user decision
+ * 2026-11-15): in small areas the country share of a quiet country month can inflate a few MODIS
+ * cell-days (Biebrza March 2001: 10 MODIS cell-days -> 54), and a reference median of 0 then
+ * outranks real observed events (Biebrza April 2020).
  */
 export function topAnomalies(h: Harmonized, fromIdx = 0, toIdx = h.value.length - 1, n = 10): Anomaly[] {
   const out: Anomaly[] = [];
@@ -128,8 +136,10 @@ export function topAnomalies(h: Harmonized, fromIdx = 0, toIdx = h.value.length 
     if (h.partial?.[i]) continue; // month to date: not comparable with full months
     const s = monthStats(h, i);
     if (s.ratio === null) continue;
-    out.push({ ...s, idx: i, estimated: h.estimated[i], lowQuality: h.lowQuality[i], preliminary: h.preliminary[i] });
+    const est = h.estimated[i];
+    const rankRatio = est ? (h.lo[i] + s.k!) / (s.median! + s.k!) : s.ratio;
+    out.push({ ...s, idx: i, estimated: est, lowQuality: h.lowQuality[i], preliminary: h.preliminary[i], rankRatio });
   }
-  out.sort((a, b) => b.ratio! - a.ratio! || b.value - a.value);
+  out.sort((a, b) => b.rankRatio - a.rankRatio || b.value - a.value);
   return out.slice(0, n);
 }

@@ -159,6 +159,8 @@ import Base from '../layouts/Base.astro';
           <p class="note">
             × typical = (value + k) / (median + k), median of the same calendar month in the 10 years
             before. k is a small offset that scales with the area, so tiny counts do not explode.
+            Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥): only
+            the anomaly the estimate supports. In small areas this leaves out most estimated months.
           </p>
         </div>
         <div class="tab about" data-tab="about" hidden>
@@ -1879,7 +1881,7 @@ import Base from '../layouts/Base.astro';
       anomEl.innerHTML = '<p class="note">Not enough history in the selected period.</p>';
       return;
     }
-    const maxR = Math.max(...top.map((a) => a.ratio!));
+    const maxR = Math.max(...top.map((a) => a.rankRatio));
     const anyFlag = top.some((a) => a.estimated || a.preliminary || a.lowQuality);
     const rows = top.map((a, i) => {
       const flags = [
@@ -1887,9 +1889,9 @@ import Base from '../layouts/Base.astro';
         a.preliminary ? 'preliminary' : '',
         a.lowQuality ? 'sensor problem' : '',
       ].filter(Boolean).join(', ');
-      const r = a.ratio!;
+      const r = a.rankRatio;
       return `<tr data-month="${a.month}" title="Show on the map"><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
-        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td>
+        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${a.estimated ? '≥' : ''}${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td>
         <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}%</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
     });
     anomEl.innerHTML = `<div class="table-wrap"><table class="anom">

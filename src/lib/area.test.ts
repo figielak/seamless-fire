@@ -178,13 +178,23 @@ test('top anomalies: sorted, inside the range, statistics from full history', ()
   const { h } = load('PL');
   const all = topAnomalies(h);
   assert.equal(all.length, 10);
-  for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].ratio! >= all[i].ratio!);
+  for (let i = 1; i < all.length; i++) assert.ok(all[i - 1].rankRatio >= all[i].rankRatio);
+  for (const a of all) {
+    if (a.estimated) assert.ok(a.rankRatio <= a.ratio! + 1e-12); // lower end of the interval
+    else assert.equal(a.rankRatio, a.ratio);
+  }
   const from = monthAbs('2020-01') - monthAbs(h.firstMonth);
   const to = monthAbs('2020-12') - monthAbs(h.firstMonth);
   const y2020 = topAnomalies(h, from, to, 3);
   assert.ok(y2020.every((a) => a.month.startsWith('2020')));
   const full = topAnomalies(h, 0, h.value.length - 1, 1000).find((a) => a.month === y2020[0].month)!;
   assert.equal(full.ratio, y2020[0].ratio); // range does not change the statistic
+});
+
+test('top anomalies: Biebrza April 2020 (largest month there in raw MODIS) ranks first', () => {
+  const { cells, model, n, h } = load('PL');
+  const a = harmonizeArea(monthlyTotals(cells, n, keepFn(resolveShape({ kind: 'preset', id: 'biebrza' })!)), h, model);
+  assert.equal(topAnomalies(a)[0].month, '2020-04');
 });
 
 // ------------------------------------------------------------------ CSV

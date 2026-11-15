@@ -522,8 +522,8 @@ export function reportHtml(r: ReportInput, s: ReportSummary = summarize(r)): str
 
   const anomRows = s.anomalies.length
     ? `<table><tr><th>#</th><th>Month</th><th class="num">Cell-days</th><th class="num">× typical</th><th class="num">Typical</th><th class="num">Percentile</th><th>Notes</th></tr>
-      ${s.anomalies.map((a, i) => `<tr><td>${i + 1}</td><td>${monthLabel(a.month)}</td><td class="num">${fmt(a.value)}</td><td class="num">${ratioStr(a.ratio!)}</td><td class="num">${fmt(a.median!)}</td><td class="num">${Math.round(a.percentile)}%</td><td>${[a.estimated ? 'estimated' : '', a.preliminary ? 'preliminary' : '', a.lowQuality ? 'sensor problem' : ''].filter(Boolean).join(', ')}</td></tr>`).join('')}</table>
-      <p class="note">× typical = (x + k) / (median + k): the month against the median of the same calendar month in the 10 years before it (k is a small constant scaled to the area, so that near-zero months do not dominate). Percentile among the same calendar month of all years.</p>`
+      ${s.anomalies.map((a, i) => `<tr><td>${i + 1}</td><td>${monthLabel(a.month)}</td><td class="num">${fmt(a.value)}</td><td class="num">${a.estimated ? '≥' : ''}${ratioStr(a.rankRatio)}</td><td class="num">${fmt(a.median!)}</td><td class="num">${Math.round(a.percentile)}%</td><td>${[a.estimated ? 'estimated' : '', a.preliminary ? 'preliminary' : '', a.lowQuality ? 'sensor problem' : ''].filter(Boolean).join(', ')}</td></tr>`).join('')}</table>
+      <p class="note">× typical = (x + k) / (median + k): the month against the median of the same calendar month in the 10 years before it (k is a small constant scaled to the area, so that near-zero months do not dominate). Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥). Percentile among the same calendar month of all years.</p>`
     : '<p class="note">Not enough history in the selected period.</p>';
 
   const p = s.profile;

@@ -88,6 +88,8 @@ Commands:
 8. Anomaly: `(x + k) / (median + k)`, median of the same calendar month over the last
    10 complete years; `k` scales with the area (e.g. fraction of mean monthly median),
    not a fixed 10. Also percentile of the month among all years.
+   Top anomalies rank estimated months by the lower end of their ~80% interval, `(lo + k) / (median + k)`,
+   shown as "≥" (user approved 2026-11-15; Biebrza April 2020 was 5th behind inflated small-area estimates).
 9. Months with preliminary data are flagged. Low-quality months are flagged too:
    Jan–Oct 2000 (Terra), Aug–Sep 2020 (Aqua), Jul–Aug 2022 (S-NPP).
 
