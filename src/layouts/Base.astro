@@ -25,6 +25,7 @@ const onMethod = Astro.url.pathname.replace(/\/?$/, '/').endsWith('/method/');
         <a href={base} aria-current={onMethod ? undefined : 'page'}>Calendar</a>
         <a href={`${base}method/`} aria-current={onMethod ? 'page' : undefined}>Method</a>
       </nav>
+      <slot name="header" />
     </header>
     <main>
       <slot />
