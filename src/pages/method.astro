@@ -16,6 +16,7 @@ interface ModelJson {
   b: number;
   sigma: number;
   sigma_annual: number;
+  drift: { sigma: number; backtest_coverage_loyo: number | null; backtest_coverage: number | null };
   methods: Record<string, MethodScore>;
   agreement: Record<'exact' | 'neighbor', { modis_in_viirs: number; viirs_in_modis: number }>;
   industrial_share: Record<string, number>;
@@ -191,6 +192,7 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
             <th rowspan="2">Chosen</th>
             <th rowspan="2">b</th>
             <th rowspan="2">Backtest</th>
+            <th rowspan="2" title="Share of backtest years inside the ~80% annual interval: validation errors only → with the drift term">In interval</th>
           </tr>
           <tr>
             {METHODS.map(() => <><th class="sub">year</th><th class="sub">month</th></>)}
@@ -209,6 +211,8 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
               <td><b>{m.model}</b></td>
               <td>{f2(m.b)}</td>
               <td>{signed(m.methods[m.model].backtest_bias)}</td>
+              <td>{m.drift.backtest_coverage_loyo === null ? '–'
+                : `${pct(m.drift.backtest_coverage_loyo)} → ${pct(m.drift.backtest_coverage!)}`}</td>
             </tr>
           ))}
         </tbody>
@@ -221,6 +225,11 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
       so the monthly error decides.
       E is chosen only when it beats D by more than 0.01 log-RMSE (rule fixed before the results).
       Backtest: fitted on 2019–2025, signed annual error on 2012–2018.
+      <b>In interval</b>: the ~80% interval from leave-one-year-out errors alone held only 0–57% of the backtest
+      years in PT, UA, GR and CL, because the sensor relation drifts over time. The interval of estimated months
+      therefore also includes a drift term as large as the mean backtest error (in log space, added in quadrature);
+      point estimates are unchanged. With it 86–100% of the backtest years fall inside (partly in-sample: the drift
+      is measured on the same years).
     </p>
   </section>
 
@@ -313,9 +322,12 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
       <li><b>Not burned area.</b> Cell-days measure how widespread fire activity was, not hectares or damage.
         A compact deadly fire (Valparaíso, February 2024) barely shows.</li>
       <li><b>Megafires saturate.</b> One cell counts once per day however many detections it has: Portugal
-        September 2024 had 10,450 VIIRS detections but 358 cell-days.</li>
+        September 2024 had 10,450 VIIRS detections but 358 cell-days; Greece August 2021 (Evia) had the most
+        detections of all months but an anomaly index of 0.9 (a typical August in cell-days). The site therefore
+        marks <b>large-fire months</b> (detection index ≥ 5 and ≥ 3× the usual detections per cell-day; VIIRS
+        years only) and can rank months by detections. Before 2012 such months cannot be told apart.</li>
       <li><b>Drift over time.</b> In Portugal the backtest underestimates every year by 21–33%, so 2000–2011
-        may be too low there. Comparison with EFFIS national statistics supports the shape of the series
+        may be too low there; the intervals include this drift (Portugal 2005: 3,738, ~80% 2,430–5,751). Comparison with EFFIS national statistics supports the shape of the series
         but cannot check its absolute level (EFFIS counts forest fires, not all vegetation fires).</li>
       <li><b>Sensor gaps.</b> Terra only in 2000 (from November) and until mid-2002; Aqua failure Aug–Sep 2020;
         S-NPP outage Jul–Aug 2022. These months are marked and left out of calibration and statistics.</li>
@@ -325,6 +337,10 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
         with NOAA-20 near real-time data, scaled to S-NPP by a per-country factor of 0.92–0.98 (ratio over 2018–2025).
         These days are preliminary.</li>
       <li><b>Custom areas</b> carry much wider intervals than countries, especially before 2012.</li>
+      <li><b>Trends</b> treat estimated years as exact: their interval and p-value leave out the uncertainty of
+        2000–2011; the VIIRS-only trend is the check.</li>
+      <li><b>Top anomalies</b> by the anomaly index favour usually quiet months (winter burning); the list can be
+        switched to the largest excess or to detections.</li>
     </ul>
   </section>
 

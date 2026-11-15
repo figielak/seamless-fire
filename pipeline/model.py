@@ -329,6 +329,20 @@ def annual_series(hm: pd.DataFrame, sigma_annual: float, b: float, sigma_terra: 
     }
 
 
+def drift_sigma(v: dict) -> float:
+    """|mean log1p(backtest annual error)|: drift of the sensor relation over time (0 without backtest)."""
+    e = np.array(list(v["backtest_by_year"].values()), float)
+    return float(abs(np.mean(np.log1p(e)))) if len(e) else 0.0
+
+
+def backtest_coverage(v: dict, sigma_annual: float) -> float | None:
+    """Share of backtest years whose annual total falls inside the ~80% interval."""
+    e = np.array(list(v["backtest_by_year"].values()), float)
+    if not len(e):
+        return None
+    return float(np.mean(np.abs(np.log1p(e)) <= INTERVAL_Z * sigma_annual))
+
+
 # ---------------------------------------------------------------- build
 
 def rnd(x, n=4):
@@ -375,8 +389,14 @@ def build_models(codes: list[str]) -> dict:
             fit_frame, source = frame_all, "pooled"
 
         p = fit_loglog(fit_frame, seasonal=(variant == "E"))
-        sigma = val_used[variant]["loyo_sigma"]
-        sigma_annual = val_used[variant]["loyo_sigma_annual"]
+        sigma_loyo = val_used[variant]["loyo_sigma"]
+        sigma_annual_loyo = val_used[variant]["loyo_sigma_annual"]
+        # Drift term (user decision 2026-11-15): the LOYO interval covered 0/7 backtest years in PT
+        # (3/7 UA, 4/7 GR, CL). The interval of estimated months also allows for a shift as large as
+        # the mean backtest log error; point estimates are unchanged.
+        drift = drift_sigma(val_used[variant])
+        sigma = float(np.hypot(sigma_loyo, drift))
+        sigma_annual = float(np.hypot(sigma_annual_loyo, drift))
         terra = terra_only(cd, ms)
         hm = harmonized_monthly(ms, p["a"], p["b"], terra)
         first = viirs_first_month(ms)
@@ -406,7 +426,13 @@ def build_models(codes: list[str]) -> dict:
             "hotspot_sensors": meta["sensors_by_year"] if meta["hotspots"] else {},
             # Custom areas: country-share check on 2° blocks, interval half-widths (log1p).
             "area": area_validation(code, cd, frame, fit_frame, frame_all, variant),
+            "drift": {"sigma": drift, "sigma_loyo": sigma_loyo, "sigma_annual_loyo": sigma_annual_loyo,
+                      "backtest_coverage_loyo": backtest_coverage(val_used[variant], sigma_annual_loyo),
+                      "backtest_coverage": backtest_coverage(val_used[variant], sigma_annual)},
         }
+        for k in ("h_month", "h_annual"):
+            model["drift"][f"{k}_loyo"] = model["area"][k]
+            model["area"][k] = float(np.hypot(model["area"][k], INTERVAL_Z * drift))
         out = rnd(model)
         # Parameters the site computes with keep full precision (rounded ones shift sums).
         for k in ("a", "b", "sigma", "sigma_annual", "interval_z"):

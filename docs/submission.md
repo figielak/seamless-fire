@@ -44,7 +44,12 @@ polygon drawn on the map) and a date range. The app answers the questions in the
 
 - *Which periods and years burned most?* Calendar, per-year chart with uncertainty, the highest month
   and year, and the top 10 anomalies (months most above their usual level, by an anomaly index where
-  1 = typical). Estimated values always come with their ~80% range.
+  1 = typical), switchable to the largest excess over typical or to VIIRS detections. Estimated values always
+  come with their ~80% range.
+- *Which single fires were largest?* Cell-days count a cell once per day, so one megafire saturates them
+  (Greece, August 2021: most detections of all months, but a typical August in cell-days). Months with many
+  detections per cell-day and a high detection index are flagged as large-fire months (▲ in the calendar, 🔥 in
+  the list): Evia and Evros in Greece, Pedrógão and 2024 in Portugal, Black Summer in Australia.
 - *How does now compare with the past?* A "Now" panel compares the current month so far with the same
   days in earlier VIIRS years (anomaly index, median, usual range of the middle 80% of years, share of
   years that were lower); "This season" compares the activity since 1 January with the usual range.
@@ -76,7 +81,8 @@ polygon drawn on the map) and a date range. The app answers the questions in the
    validation (each year hidden and predicted from MODIS alone, the same task as reconstructing
    2000–2011). The log-log model has the lowest error in every country, often half that of simple
    ratios, because the relation is not proportional (b = 0.56–0.86). The ~80% interval shown for
-   2000–2011 comes from these validation errors. A naive splice of raw counts would jump ×1.7–3.5 in
+   2000–2011 comes from these validation errors, widened by the drift of the sensor relation measured in a
+   backtest (calibrated on 2019–2025, tested on 2012–2018; without it Portugal's interval missed all 7 years). A naive splice of raw counts would jump ×1.7–3.5 in
    2012; the harmonized series does not (2012/2011 ratio 0.85–1.12, Ukraine's drop is in raw MODIS too).
 4. *Custom areas.* The browser sums raw cell-days inside the area, then applies the model (an area gets
    its share of the country estimate before 2012, with a wider interval). The Method page opens with the
@@ -95,11 +101,13 @@ told apart from vegetation fires.
 **Tools.** Python (pandas, numpy) computes all data; an Astro static site with TypeScript, Plotly and
 Leaflet displays it (no server); GitHub Actions builds it and GitHub Pages hosts it, and the near
 real-time data are refreshed with one command. The TypeScript harmonization is tested against the Python
-reference (148 automated tests in total).
+reference (153 automated tests in total).
 
 **Limitations.** Cell-days measure how widespread fire activity was, not burned area or the impact of
-one fire (the app says so next to the calendar and in every export); very large fires saturate. 2000–2011 values are estimates with an interval; in some countries
-(Portugal most) the relation between the sensors drifts over time. Near real-time data are preliminary.
+one fire (the app says so next to the calendar and in every export); very large fires saturate (Evia, August 2021,
+looks like a typical August in cell-days), which is why large-fire months are flagged from VIIRS detections. 2000–2011
+values are estimates with an interval; in some countries (Portugal most) the relation between the sensors drifts over
+time, and the interval includes that drift. Trends treat estimated years as exact; the VIIRS-only trend is the check. Near real-time data are preliminary.
 All evidence: `docs/validation.md` in the repository.
 
 **Forecast and places to watch.** A 7-day outlook of fire activity per country from the Canadian Fire Weather

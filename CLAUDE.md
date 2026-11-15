@@ -72,7 +72,9 @@ Commands:
 5. Validation: leave-one-year-out, metrics = annual % error and monthly log-RMSE.
    Compare A (global ratio), B (country ratio), C (country × month ratio), D, E.
    Plus backtest: calibrate 2019–2025, test 2012–2018.
-6. 2000–2011: model applied to MODIS, ~80% interval from LOYO residual SD in log space.
+6. 2000–2011: model applied to MODIS, ~80% interval from LOYO residual SD in log space, plus a drift term
+   (`sigma' = hypot(sigma, |mean log backtest error|)`, also for area `h`; user approved 2026-11-15, PT backtest
+   was 0/7 years inside; `model.json` → `drift`, validation §6a).
    Terra-only months (before Aqua data start, ~mid-2002): scale MODIS cell-days by the country
    (Terra+Aqua)/Terra ratio first, widen the interval for that extra step.
    Calibration excludes S-NPP Jul–Aug 2022 and Aqua Aug–Sep 2020 (sensor outages).
@@ -90,6 +92,9 @@ Commands:
    not a fixed 10. Also percentile of the month among all years.
    Top anomalies rank estimated months by the lower end of their ~80% interval, `(lo + k) / (median + k)`,
    shown as "≥" (user approved 2026-11-15; Biebrza April 2020 was 5th behind inflated small-area estimates).
+   Ranking modes: index (default) | excess (x − median, lo for estimated) | detection index (observed months).
+   Large-fire month (2026-11-15, Evia Aug 2021 had index 0.9): detection index ≥ 5, detections per cell-day
+   ≥ 3× the area median, ≥ 100 detections (`src/lib/stats.ts`, validation §9c). Display only.
 9. Months with preliminary data are flagged. Low-quality months are flagged too:
    Jan–Oct 2000 (Terra), Aug–Sep 2020 (Aqua), Jul–Aug 2022 (S-NPP).
 

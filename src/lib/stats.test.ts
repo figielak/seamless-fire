@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { K_MIN, midRankPercentile, monthStats, quantile } from './stats.ts';
+import { K_MIN, detStats, midRankPercentile, monthStats, quantile, rankMonths, typicalPerCellDay } from './stats.ts';
 import type { Harmonized } from './harmonize.ts';
 
 /** Synthetic series from 2000-01; f(year, calMonth0) -> value. */
@@ -95,4 +95,57 @@ test('not enough history -> null anomaly', () => {
 test('quantile interpolates like numpy', () => {
   assert.equal(quantile([1, 2, 3, 4], 0.5), 2.5);
   assert.ok(Math.abs(quantile([0, 10], 0.1) - 1) < 1e-12);
+});
+
+/** Observed series 2012-01..2025-12 with detections: August has 50 cell-days, 2 detections each. */
+function detSeries(event?: { year: number; cd: number; det: number }): Harmonized {
+  const h = series(2025, (y, m) => (y < 2012 ? 0 : m === 7 ? 50 : m === 0 ? 1 : 5));
+  const n = h.value.length;
+  const det = new Float64Array(n);
+  const est: boolean[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = 2000 + Math.floor(i / 12);
+    est.push(y < 2012);
+    if (event && y === event.year && i % 12 === 7) h.value[i] = event.cd;
+    det[i] = 2 * h.value[i];
+    if (event && y === event.year && i % 12 === 7) det[i] = event.det;
+  }
+  return { ...h, viirs: h.value, viirsDet: det, estimated: est, lo: h.value, hi: h.value };
+}
+
+test('large fire: few cell-days, many detections is flagged; a normal month is not', () => {
+  const h = detSeries({ year: 2024, cd: 50, det: 1500 });
+  assert.equal(typicalPerCellDay(h), 2);
+  const idx = (2024 - 2000) * 12 + 7;
+  const ds = detStats(h, idx)!;
+  assert.equal(ds.perCellDay, 30);
+  assert.ok(ds.index! > 5);
+  assert.equal(ds.large, true);
+  // cell-day anomaly index of the same month is typical (1.0): only detections see it
+  assert.equal(monthStats(h, idx).ratio, 1);
+  assert.equal(detStats(h, idx - 12)!.large, false);
+  // estimated months have no detection statistics
+  assert.equal(detStats(h, 5 * 12 + 7), null);
+});
+
+test('large fire needs enough detections and a high ratio', () => {
+  // many detections but proportional to cell-days (wide-spread burning): not a large-fire month
+  const wide = detSeries({ year: 2024, cd: 750, det: 1500 });
+  assert.equal(detStats(wide, (2024 - 2000) * 12 + 7)!.large, false);
+});
+
+test('rankMonths: modes sort by their key; detections skip estimated months', () => {
+  const h = detSeries({ year: 2024, cd: 50, det: 1500 });
+  // January is 1 cell-day (typical 1) -> make one January a big relative jump
+  const jan = (2023 - 2000) * 12;
+  h.value[jan] = 12; h.viirsDet![jan] = 24;
+  const from = (2018 - 2000) * 12; // synthetic zeros before 2012 inflate 2012..2017
+  const byIndex = rankMonths(h, 'index', from);
+  assert.equal(byIndex[0].month, '2023-01');
+  const byDet = rankMonths(h, 'detections');
+  assert.equal(byDet[0].month, '2024-08');
+  assert.ok(byDet.every((r) => !r.estimated));
+  const byExcess = rankMonths(h, 'excess', from);
+  assert.equal(byExcess[0].month, '2023-01'); // +11 over typical 1; August 2024 is +0
+  for (const l of [byIndex, byDet, byExcess]) for (let i = 1; i < l.length; i++) assert.ok(l[i - 1].key >= l[i].key);
 });

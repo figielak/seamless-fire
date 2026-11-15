@@ -13,7 +13,7 @@ python pipeline/sanity.py PL                   # full detail for one country
 python -m unittest discover -s pipeline/tests  # unit + consistency tests
 ```
 
-Run date: 2026-11-14 (near real-time sections: data through 2026-11-13). Countries: Poland (PL), Portugal (PT), Spain (ES), Greece (GR),
+Run date: 2026-11-14, sections 6a and 9c 2026-11-15 (near real-time sections: data through 2026-11-13). Countries: Poland (PL), Portugal (PT), Spain (ES), Greece (GR),
 Ukraine (UA), Australia (AU), Canada (CA), Chile (CL).
 
 ## 1. Unit of comparison: cell-days
@@ -180,8 +180,8 @@ The seasonal term helps where the season changes how the sensors relate: in Pola
 grass burning versus summer stubble burning. Both variants use the same formula on the site
 (D = E with four equal `a` values).
 
-`sigma` is the standard deviation of the LOYO errors; the 80% interval for estimated years is
-± 1.28 · sigma in log space.
+`sigma` is the standard deviation of the LOYO errors. The ~80% interval for estimated months and years
+is ± 1.28 · sigma' in log space, with sigma' = √(sigma² + drift²) and drift from the backtest (section 6a).
 
 ## 6. Backtest (stability over time)
 
@@ -206,6 +206,26 @@ Chile drifts the other way: a model fitted on 2019–2025 **overestimates** 2012
 (+17% on average, +38% in the record fire year 2017). The drift therefore has no single
 direction across countries, which points to regional changes in fire regime rather than one
 global sensor trend.
+
+### 6a. Drift in the interval (`pipeline/model.py: drift_sigma`, user decision 2026-11-15)
+
+Does the ~80% annual interval (LOYO errors only) hold the backtest years? Share of the 7 backtest years
+2012–2018 whose observed total falls inside ± 1.28 · sigma_annual of the backtest prediction:
+
+| | PL | PT | ES | GR | UA | AU | CA | CL |
+|---|---|---|---|---|---|---|---|---|
+| drift = \|mean log1p(backtest error)\| | 0.044 | **0.310** | 0.040 | 0.121 | 0.093 | 0.005 | 0.036 | 0.150 |
+| In interval, LOYO sigma only | 71% | **0%** | 86% | 57% | 43% | 100% | 86% | 57% |
+| In interval, with drift term | 71% | 100% | 86% | 86% | 86% | 100% | 86% | 86% |
+| sigma monthly (LOYO → with drift) | 0.430 → 0.432 | 0.362 → 0.477 | 0.217 → 0.221 | 0.260 → 0.286 | 0.239 → 0.257 | 0.100 → 0.100 | 0.175 → 0.179 | 0.271 → 0.310 |
+| sigma annual (LOYO → with drift) | 0.182 → 0.188 | 0.130 → 0.336 | 0.086 → 0.095 | 0.099 → 0.156 | 0.085 → 0.126 | 0.043 → 0.043 | 0.106 → 0.112 | 0.114 → 0.188 |
+
+LOYO errors measure how well a year is predicted from neighbouring years, not how the sensor relation
+changes over a decade. The site's interval therefore adds the drift in quadrature to the monthly and annual
+sigma and to the custom-area half-widths (`h_month`, `h_annual`: √(h² + (1.28 · drift)²)). Point estimates
+are unchanged. Portugal 2005: 3,738 cell-days, ~80% 2,430–5,751 (before: ±18%). The coverage with the drift
+term is partly in-sample (drift is measured on the same backtest years), so it shows consistency, not an
+independent test. Values in `model.json` → `drift` (LOYO sigmas kept as `sigma_loyo`, `sigma_annual_loyo`).
 
 ## 7. Retransformation (smearing) check
 
@@ -353,6 +373,35 @@ Biebrza valley 2.67 / 0.34, Algarve 1.07 / 0.98 (log-RMSE direct / share).
 - Annual sums: years fully before VIIRS use `h_annual`; a mixed year (2012, January estimated)
   adds the monthly interval of the estimated month to the observed sum. The country annual
   series uses the same mixed-year rule (before stage 5 the 2012 interval was zero).
+
+### 9c. Large single fires and the detection index (`src/lib/stats.ts`, user decision 2026-11-15)
+
+Cell-days saturate when one fire burns in the same few 0.1° cells for days. The months with the most S-NPP
+detections (2012 – Oct 2026) and their rank in cell-days:
+
+| Month | Event | Detections (rank) | Cell-days (rank) | Det. per cell-day | Anomaly index (cell-days) |
+|---|---|---|---|---|---|
+| GR 2021-08 | Evia, Attica | 7,095 (#1) | 246 (#38) | 28.8 | 0.9 |
+| GR 2023-08 | Evros, Dadia | 5,729 (#2) | 257 (#37) | 22.3 | 1.0 |
+| PT 2024-09 | Aveiro, Viseu | 10,412 (#1) | 358 (#12) | 29.1 | 3.6 |
+| PT 2025-08 | central and north | 10,060 (#2) | 436 (#8) | 23.1 | 3.2 |
+| ES 2025-08 | Ourense, León | 20,859 (#1) | 1,111 (#2) | 18.8 | 2.8 |
+
+The usual month has 1.4–2.2 detections per cell-day in Europe (AU 7.1, CA 3.3). A Greek user would read
+the two worst fire summers as typical Augusts. The site keeps cell-days as the unit (the harmonization needs
+it, section 1a) and adds, for observed VIIRS months only:
+
+- **detection index** = (det + k) / (median + k), the anomaly formula on raw S-NPP detections (k and the
+  10-year reference as for cell-days; estimated months have no detections on the VIIRS scale);
+- **large-fire month** when detection index ≥ 5, detections per cell-day ≥ 3 × the area's median, and ≥ 100
+  detections. An absolute threshold fails (AU and CA have high ratios every season). Flagged country months:
+  GR 2021-05, 2021-08, 2023-07, 2023-08; PT 2017-06 (Pedrógão), 2017-10, 2024-09, 2025-08; ES 2021-10…12
+  (La Palma eruption: lava is not flagged as type 2), 2022-06, 2022-07, 2025-08, 2026-07; AU 2019-12 (Black
+  Summer); CA 2017-08/09, 2019-05, 2023-05/06/09 (record season), 2024-09, 2025-05/06/09; CL 2023-02; none in PL, UA
+  (many small fires: 1.4 and 1.9 detections per cell-day).
+
+"Top anomalies" ranks by the anomaly index (default), by excess (cell-days − typical, which favours big fire
+months over winter burning on a near-zero median) or by the detection index.
 
 ## 10. Data quality checks
 
@@ -529,6 +578,9 @@ observed 7–29) and the wet week after it, but underestimates peaks (it predict
 | High | AU, CA, ES | high correlation, monthly error 10–22%, stable backtest |
 | Good, older years may be biased | PT, GR, UA, CL | good LOYO, systematic backtest drift (PT, GR, UA low by 9–27%; CL high by 17%) |
 | Lower | PL | small, short agricultural fires; sensors see different events; monthly error ~×1.5 |
+
+Drift is part of the interval since 2026-11-15 (section 6a), so the "older years may be biased" group has wider
+intervals before 2012 (PT annual ±54%).
 
 In every country the harmonized series is much closer to observed VIIRS than any constant
 multiplier, and the uncertainty shown on the site comes from these validation errors.

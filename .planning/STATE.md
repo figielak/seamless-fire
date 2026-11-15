@@ -21,11 +21,14 @@ Updated: 2026-11-15 ~10:25
 - Near real-time data: refreshed by hand (`live_update.py`, then `forecast_update.py`), last runs 2026-11-15 ~10:10 and ~10:21 (second: FIRMS file unchanged, nothing to commit):
   fire data through 2026-11-14, forecasts ES/PL/PT/UA issued 2026-11-15 for 15–21 Nov (POWER state 2026-11-12).
 - `docs/submission.md` updated with all of the above (summary 942 characters).
-- Tests: `python -m unittest discover -s pipeline/tests` (45), `npm run test:site` (103), `npm run check` (0 errors)
+- Tests: `python -m unittest discover -s pipeline/tests` (47), `npm run test:site` (106), `npm run check` (0 errors)
 - Deploy: push to `main` → workflow "Deploy to GitHub Pages"; check the run via
   `curl https://api.github.com/repos/figielak/seamless-fire/actions/runs` (no `gh`). A newer push cancels the older run.
 
 ## Next step
+
+- Usefulness review 10:30 (`.planning/REVIEW_usefulness.md`), all items A–E done 10:40 (user: "do everything"):
+  large-fire flag + 3 ranking modes, drift term in intervals (models rebuilt with `--model-only`), texts. Check live after push.
 
 - Before 13:00: optionally refresh NRT data once more around 12:30 (15 Nov becomes complete in FIRMS only later); fill
   `[FULL NAME]` and the demo link in `docs/submission.md`; check links in a private window.

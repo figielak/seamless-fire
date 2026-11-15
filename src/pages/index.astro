@@ -157,7 +157,14 @@ import Base from '../layouts/Base.astro';
           <p class="note" id="forecast-note"></p>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
-          <p class="unit">Months most above their usual level (anomaly index), in the selected period. Not the largest months: those are in the "Highest" line. Click a row to map it.</p>
+          <div class="cal-head">
+            <p class="unit" id="rank-unit"></p>
+            <div class="view-toggle small-toggle cal-toggle" role="group" aria-label="Rank months by">
+              <button type="button" data-rank="index" aria-pressed="true" title="Months most above their usual level (anomaly index)">Most unusual</button>
+              <button type="button" data-rank="excess" aria-pressed="false" title="Months with the most cell-days above their usual level">Largest excess</button>
+              <button type="button" data-rank="detections" aria-pressed="false" title="Months with the most VIIRS detections compared with their usual level (observed months only): finds large single fires">Most detections</button>
+            </div>
+          </div>
           <div id="anomalies"></div>
           <p class="note">
             <b>Anomaly index</b> = (cell-days + k) / (typical + k); 1 = typical. Typical = median of the same
@@ -165,6 +172,16 @@ import Base from '../layouts/Base.astro';
             counts do not explode; the index is therefore not a plain "times more" (10 vs typical 2 can give 3.0).
             Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥): only
             the anomaly the estimate supports. In small areas this leaves out most estimated months.
+            The index favours months that are usually quiet (winter burning on a typical level near 0);
+            <i>Largest excess</i> ranks by cell-days above typical instead.
+          </p>
+          <p class="note">
+            <b>Large-fire months</b> (🔥): one big fire covers few 0.1° cells, so its cell-days stay ordinary
+            while VIIRS detections pile up (Greece, August 2021, Evia: the most detections of all months, but an
+            anomaly index of 0.9). A month is marked when its <b>detection index</b> (the same formula on raw
+            VIIRS detections, observed months since 2012) is at least 5 and it has at least 3× the usual
+            detections per cell-day of the area (and at least 100 detections). <i>Most detections</i> ranks by
+            the detection index.
           </p>
         </div>
         <div class="tab about" data-tab="about" hidden>
@@ -176,7 +193,14 @@ import Base from '../layouts/Base.astro';
             <li>
               <b>From February 2012</b> the values are observed VIIRS S-NPP cell-days. <b>Before</b>, they are
               estimated from MODIS with a per-country model calibrated on 2012–2025
-              (hover shows the ~80% interval).
+              (hover shows the ~80% interval). The interval comes from validation errors and also allows for
+              the drift of the sensor relation over time measured in the backtest (widest in Portugal).
+            </li>
+            <li>
+              <b>Large single fires saturate cell-days</b>: one cell counts once per day however much of it
+              burns. Greece, August 2021 (Evia) had the most VIIRS detections of all months but looks like a
+              typical August in cell-days. Such months are marked 🔥 / ▲ (large-fire month: many detections per
+              cell-day) in the calendar and the anomaly list; <i>Most detections</i> in Top anomalies ranks them.
             </li>
             <li>
               <b>Custom area</b>: a cell counts when its center is inside the area. Before 2012 the area gets
@@ -1142,7 +1166,7 @@ import Base from '../layouts/Base.astro';
     type AreaSpec,
     type ViewState,
   } from '../lib/geo';
-  import { monthStats, topAnomalies } from '../lib/stats';
+  import { detStats, monthStats, rankMonths, typicalPerCellDay, type RankMode } from '../lib/stats';
   import { exportHotspots, hotspotFiles, monthlyCsv } from '../lib/csv';
   import { areaGeoJson, exportReadme } from '../lib/exportdoc';
   import { zipFiles } from '../lib/zip';
@@ -1180,6 +1204,7 @@ import Base from '../layouts/Base.astro';
     [0, '#2166ac'], [0.25, '#92c5de'], [0.5, '#f7f7f7'], [0.75, '#f4a582'], [1, '#b2182b'],
   ];
   let calMode: 'value' | 'anom' = 'value';
+  let rankMode: RankMode = 'index';
   const FIRMS_URL = 'https://firms.modaps.eosdis.nasa.gov/download/';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1390,6 +1415,8 @@ import Base from '../layouts/Base.astro';
     const lowX: number[] = [], lowY: number[] = [];
     const preX: number[] = [], preY: number[] = [];
     const partX: number[] = [], partY: number[] = [];
+    const lfX: number[] = [], lfY: number[] = [];
+    const typDpc = typicalPerCellDay(hh);
     const liveInfo = d.model.live as LiveInfo | undefined;
     const lastComplete = monthAbs(d.model.last_complete_month);
     // Months outside a sensor's raw-file coverage show "no data", not 0.
@@ -1437,7 +1464,16 @@ import Base from '../layouts/Base.astro';
       lines.push(
         `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${rawV(h.viirs[i], a)}`,
       );
-      if (h.viirsDet && !h.estimated[i]) lines.push(`${a > lastComplete ? 'NOAA-20' : 'VIIRS S-NPP'} detections${h.area ? ' in the area (cell centres inside)' : ''}: ${fmt(h.viirsDet[i])}`);
+      const ds = h.raw ? null : detStats(hh, i, typDpc);
+      if (h.viirsDet && !h.estimated[i]) {
+        lines.push(`${a > lastComplete ? 'NOAA-20' : 'VIIRS S-NPP'} detections${h.area ? ' in the area (cell centres inside)' : ''}: ${fmt(h.viirsDet[i])}` +
+          (ds?.index != null ? ` · detection index ${ds.index >= 10 ? ds.index.toFixed(0) : ds.index.toFixed(1)}` : ''));
+      }
+      if (ds?.large) {
+        lines.push(`🔥 <b>Large-fire month</b>: ${ds.perCellDay!.toFixed(1)} detections per cell-day (usual ${ds.typicalPerCellDay!.toFixed(1)});` +
+          '<br>cell-days understate it (few cells, many detections)');
+        lfX.push(c); lfY.push(years[r]);
+      }
       if (h.terraOnly[i]) lines.push('Terra only (before Aqua), scaled up');
       if (h.lowQuality[i]) { if (h.raw) lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
       if (h.preliminary[i]) {
@@ -1519,6 +1555,12 @@ import Base from '../layouts/Base.astro';
       {
         type: 'scatter', mode: 'markers', x: partX, y: partY, name: 'month to date', hoverinfo: 'skip',
         marker: { symbol: 'circle-open-dot', size: 11, line: { width: 2, color: '#f28e2b' }, color: '#f28e2b' },
+      },
+      // after "on the map" (index 3, restyled by markCalendar)
+      {
+        type: 'scatter', mode: 'markers', x: lfX, y: lfY, name: 'large fire (many detections)', hoverinfo: 'skip',
+        showlegend: lfX.length > 0,
+        marker: { symbol: 'triangle-up', size: 8, color: '#e8432e', line: { width: 1, color: '#ffffff' } },
       },
     ];
 
@@ -1725,7 +1767,9 @@ import Base from '../layouts/Base.astro';
       <p>Trend ${a.from}–${a.to}: ${trendText(a)}.</p>
       ${v ? `<p>VIIRS only ${v.from}–${v.to}: ${trendText(v)}. ${verdict}</p>` : ''}
       <p class="note">By calendar month (per year, ${a.from}–${a.to}; colour = significant, red up, blue down):</p>
-      <div class="trend-months">${months}</div>`;
+      <div class="trend-months">${months}</div>
+      ${a.from < 2012 ? `<p class="note">The trend interval and p-value treat the estimated years (before 2012) as
+        exact: they do not include the uncertainty of the MODIS estimates. Compare with the VIIRS-only trend.</p>` : ''}`;
   }
 
   // ------------------------------------------------------------------ this season
@@ -2034,24 +2078,47 @@ import Base from '../layouts/Base.astro';
   // ------------------------------------------------------------------ anomalies
 
   function renderAnomalies(h: Harmonized, fromIdx: number, toIdx: number) {
-    const top = topAnomalies(h, fromIdx, toIdx, 10);
+    const unit: Record<RankMode, string> = {
+      index: 'Months most above their usual level (anomaly index), in the selected period. Click a row to map it.',
+      excess: 'Months with the most cell-days above their usual level (cell-days − typical), in the selected period. Click a row to map it.',
+      detections: 'Months with the most VIIRS detections compared with their usual level (detection index), observed months only. Finds large single fires. Click a row to map it.',
+    };
+    $('rank-unit').textContent = unit[rankMode];
+    const top = rankMonths(h, rankMode, fromIdx, toIdx, 10);
     if (!top.length) {
-      anomEl.innerHTML = '<p class="note">Not enough history in the selected period.</p>';
+      anomEl.innerHTML = `<p class="note">${rankMode === 'detections' && !h.viirsDet ? 'No detection counts for this area.'
+        : 'Not enough history in the selected period.'}</p>`;
       return;
     }
-    const maxR = Math.max(...top.map((a) => a.rankRatio));
-    const anyFlag = top.some((a) => a.estimated || a.preliminary || a.lowQuality);
+    const maxK = Math.max(...top.map((a) => a.key), 1e-9);
+    const anyFlag = top.some((a) => a.estimated || a.preliminary || a.lowQuality || a.detStats?.large);
+    const ix = (r: number) => (r >= 10 ? r.toFixed(0) : r.toFixed(1));
+    const keyHead = rankMode === 'index' ? 'Anomaly index ⓘ' : rankMode === 'excess' ? 'Above typical' : 'Detection index ⓘ';
+    const keyTitle = rankMode === 'excess' ? 'Cell-days minus typical (estimated months: lower end of the ~80% interval)'
+      : '(value + k) / (median + k); 1 = typical. Not a plain ratio: k keeps tiny counts from exploding.';
     const rows = top.map((a, i) => {
       const flags = [
+        a.detStats?.large ? '🔥 large fire' : '',
         a.estimated ? 'estimated' : '',
         a.preliminary ? 'preliminary' : '',
         a.lowQuality ? 'sensor problem' : '',
       ].filter(Boolean).join(', ');
-      const r = a.rankRatio;
+      const ds = a.detStats;
+      const keyTxt = rankMode === 'excess' ? `${a.estimated ? '≥ ' : ''}+${fmt(a.key)}`
+        : `${a.estimated && rankMode === 'index' ? '≥' : ''}${ix(a.key)}`;
+      const extra = rankMode === 'detections'
+        ? `<td>${fmt(ds!.det)}</td><td>${ds!.perCellDay === null ? '–' : ds!.perCellDay.toFixed(1)}</td><td>${ix(a.ratio!)}</td>`
+        : `<td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}% of years</td>`;
       return `<tr data-month="${a.month}" title="Show on the map"><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
-        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${a.estimated ? '≥' : ''}${r >= 10 ? r.toFixed(0) : r.toFixed(1)}</b></td>
-        <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}% of years</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
+        <td class="bar-cell"><span class="bar" style="width:${(Math.max(a.key, 0) / maxK * 100).toFixed(1)}%"></span><b>${keyTxt}</b></td>
+        ${extra}${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
     });
+    const extraHead = rankMode === 'detections'
+      ? '<th>Detections</th><th title="VIIRS detections per cell-day">Det. per cell-day</th><th title="Anomaly index of cell-days, for comparison">Cell-day index</th>'
+      : '<th>Typical</th><th title="Share of the same calendar month in all years that was lower">Higher than</th>';
+    const typ = typicalPerCellDay(h);
+    const typNote = rankMode === 'detections' && typ !== null
+      ? `<p class="note">Usual detections per cell-day in this area: ${typ.toFixed(1)}. 🔥 = at least 3× that and a detection index of at least 5.</p>` : '';
     // Largest values (not anomalies): highest month and highest complete calendar year in the period.
     const first = monthAbs(h.firstMonth);
     let hm = -1;
@@ -2067,9 +2134,13 @@ import Base from '../layouts/Base.astro';
     const highest = hm < 0 ? '' : `<p class="highest"><b>Highest</b> in the period:
       month <b>${shortMonth(monthStr(first + hm))}</b>, ${fmt(h.value[hm])} cell-days (${h.estimated[hm] ? `estimated, ~80%: ${fmt(h.lo[hm])}–${fmt(h.hi[hm])}` : status(false, h.preliminary[hm])})${hy >= 0
         ? ` · year <b>${hy}</b>, ${fmt(hyV)} cell-days (${hyEst ? 'estimated, see Per year for its range' : 'observed'})` : ''}.</p>`;
-    anomEl.innerHTML = `${highest}<div class="table-wrap"><table class="anom">
-      <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th title="(value + k) / (median + k); 1 = typical. Not a plain ratio: k keeps tiny counts from exploding.">Anomaly index ⓘ</th><th>Typical</th>
-      <th title="Share of the same calendar month in all years that was lower">Higher than</th>${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+    const lf: string[] = [];
+    for (let i = fromIdx; i <= toIdx; i++) if (detStats(h, i, typ)?.large) lf.push(shortMonth(monthStr(first + i)));
+    const lfLine = lf.length
+      ? `<p class="highest">🔥 <b>Large-fire months</b> in the period (few cells, many detections; cell-days understate them): ${lf.join(', ')}.</p>` : '';
+    anomEl.innerHTML = `${highest}${lfLine}<div class="table-wrap"><table class="anom">
+      <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th title="${keyTitle}">${keyHead}</th>
+      ${extraHead}${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>${typNote}`;
   }
 
   // ------------------------------------------------------------------ export
@@ -2540,6 +2611,12 @@ import Base from '../layouts/Base.astro';
         .forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.cal === calMode)));
       if (current) syncView(current.h, current.d);
       rerenderCalendar();
+    }));
+    document.querySelectorAll<HTMLButtonElement>('button[data-rank]').forEach((b) => b.addEventListener('click', () => {
+      rankMode = b.dataset.rank as RankMode;
+      document.querySelectorAll<HTMLButtonElement>('button[data-rank]')
+        .forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.rank === rankMode)));
+      if (current) renderAnomalies(current.h, current.fromIdx, current.toIdx);
     }));
     document.querySelectorAll<HTMLButtonElement>('button[data-smooth]').forEach((b) => b.addEventListener('click', () => {
       const on = b.dataset.smooth === '1';
