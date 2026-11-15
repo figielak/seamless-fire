@@ -3,11 +3,11 @@
 Short, current snapshot. Overwrite sections, do not append history here.
 Method, data contract and work order live in `CLAUDE.md` and `docs/plan.md`; do not copy them.
 
-Updated: 2026-11-14
+Updated: 2026-11-15
 
 ## Where we are
 
-- Stage: **7 done** (README written and live). All planned stages done; remaining: final checks before judging (Sun 15.11 13:00)
+- Stage: **7 done**, UX review fixes pushed 2026-11-15 morning (cell-day definition, anomaly index, forecast map, Method summary, 1280×800 layout). Remaining: final checks before judging (Sun 15.11 13:00)
 - Main page `src/pages/index.astro`: CSS grid, nothing floats over the map (2026-11-14):
   controls left | "Now" strip on top | map and chart panel (Calendar / Per year / Anomalies / About) side by side.
   Calendar rows fit the panel height; colour range starts at P2 of non-flagged months. Below 1150 px: one column.

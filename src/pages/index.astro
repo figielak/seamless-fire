@@ -157,7 +157,7 @@ import Base from '../layouts/Base.astro';
           <p class="note" id="forecast-note"></p>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
-          <p class="unit">Months most above their usual level (anomaly index), in the selected period. This is not the list of the largest months: see "Highest" below the table. Click a row to map it.</p>
+          <p class="unit">Months most above their usual level (anomaly index), in the selected period. Not the largest months: those are in the "Highest" line. Click a row to map it.</p>
           <div id="anomalies"></div>
           <p class="note">
             <b>Anomaly index</b> = (cell-days + k) / (typical + k); 1 = typical. Typical = median of the same
@@ -725,6 +725,10 @@ import Base from '../layouts/Base.astro';
     margin-top: 1.2rem;
     padding-top: 0.6rem;
     border-top: 1px solid var(--line);
+  }
+  .highest {
+    margin: 0.3rem 0 0.4rem;
+    font-size: 0.88rem;
   }
   .watch-lead {
     margin: 0.2rem 0 0.4rem;
@@ -2019,7 +2023,22 @@ import Base from '../layouts/Base.astro';
         <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${a.estimated ? '≥' : ''}${r >= 10 ? r.toFixed(0) : r.toFixed(1)}</b></td>
         <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}% of years</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
     });
-    anomEl.innerHTML = `<div class="table-wrap"><table class="anom">
+    // Largest values (not anomalies): highest month and highest complete calendar year in the period.
+    const first = monthAbs(h.firstMonth);
+    let hm = -1;
+    for (let i = fromIdx; i <= toIdx; i++) if (!h.partial[i] && (hm < 0 || h.value[i] > h.value[hm])) hm = i;
+    let hy = -1, hyV = -1, hyEst = false;
+    for (let i = fromIdx; i <= toIdx; i++) {
+      if ((first + i) % 12 !== 0 || i + 11 > toIdx) continue;
+      let v = 0, est = false, ok = true;
+      for (let k = i; k < i + 12; k++) { v += h.value[k]; est ||= h.estimated[k]; ok &&= !h.partial[k]; }
+      if (ok && v > hyV) { hyV = v; hy = Math.floor((first + i) / 12); hyEst = est; }
+    }
+    const status = (est: boolean, pre = false) => (est ? 'estimated' : pre ? 'preliminary' : 'observed');
+    const highest = hm < 0 ? '' : `<p class="highest"><b>Highest</b> in the period:
+      month <b>${shortMonth(monthStr(first + hm))}</b>, ${fmt(h.value[hm])} cell-days (${h.estimated[hm] ? `estimated, ~80%: ${fmt(h.lo[hm])}–${fmt(h.hi[hm])}` : status(false, h.preliminary[hm])})${hy >= 0
+        ? ` · year <b>${hy}</b>, ${fmt(hyV)} cell-days (${hyEst ? 'estimated, see Per year for its range' : 'observed'})` : ''}.</p>`;
+    anomEl.innerHTML = `${highest}<div class="table-wrap"><table class="anom">
       <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th title="(value + k) / (median + k); 1 = typical. Not a plain ratio: k keeps tiny counts from exploding.">Anomaly index ⓘ</th><th>Typical</th>
       <th title="Share of the same calendar month in all years that was lower">Higher than</th>${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }

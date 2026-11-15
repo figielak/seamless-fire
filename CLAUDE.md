@@ -174,7 +174,7 @@ uses point-in-polygon on hotspots. Optional: cell map for a selected month.
 
 Layout (user decision, 2026-11-14, revised same day): CSS grid, nothing floats over the map. Left control
 panel (collapsible) | "Now" strip across the top | Leaflet map (Sentinel-2 cloudless base from EOX, OSM option)
-and chart panel side by side, tabs Calendar, Per year, Top anomalies, How to read it. Calendar rows fit the
+and chart panel side by side, tabs Calendar, Per year, Top anomalies, How to read. Calendar rows fit the
 panel height; its colour range starts at the 2nd percentile of months without sensor problems. Map layer = per-cell share of the harmonized
 value (`src/lib/cellmap.ts`, same rule as `harmonizeArea`); clicking a calendar month or anomaly row maps it. In "One month" mode the map also shows the month's hotspot points
 (yearly `hotspots/{year}.csv`, cached; click = date, UTC time, sensor, FRP); not for AU/CA or "All countries".
