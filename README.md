@@ -20,8 +20,8 @@ pixels and detects several times more fire, so joining the two records naively m
 - **Calendar** (years × months): 2000–2011 are estimated from MODIS on the VIIRS scale with a ~80%
   interval; from February 2012 the values are observed VIIRS. Preliminary months and months with known
   sensor problems are marked.
-- **Updated every day.** The current month comes from FIRMS near real-time data (NOAA-20 on the S-NPP
-  scale) and is marked "month to date".
+- **Up to recent days.** The current month comes from FIRMS near real-time data (NOAA-20 on the S-NPP
+  scale), up to the date shown on the site, and is marked "month to date".
 - **Map** of fire cells for the selected month or period, on one colour scale for all countries, with the
   month's hotspot points (date, time, sensor, FRP).
 - **Recurrence map**: for a calendar month, how often each ~1 km cell had fire in 2012–2026, so you see
@@ -32,7 +32,7 @@ pixels and detects several times more fire, so joining the two records naively m
 - **This season**: fire activity since 1 January against the usual range of 2012–2025.
 - **Next 7 days**: expected fire activity per day for the country, from the Canadian Fire Weather Index
   computed from weather forecasts, with an 80% range and its skill measured on real archived forecasts
-  (countries where the check passed; see `docs/validation.md` §15).
+  (countries where the check passed; see `docs/validation.md` §15), and places to watch in the selected area.
 - **Per-year chart** with uncertainty and **trends**: the change per year (Theil–Sen, Mann–Kendall test) for the
   whole period and for the VIIRS years alone, and for each calendar month (e.g. April burning declines).
 - **Top 10 anomalies**: months most above their usual level.
@@ -83,11 +83,11 @@ docs/           plan, concept, validation report
 The browser sums the cells inside the selected area and applies the model (`src/lib/harmonize.ts`, a port
 of the Python code, tested against Python reference outputs).
 
-Daily update: a GitHub Actions job (`.github/workflows/update-live.yml`, 05:30 UTC) downloads the FIRMS global
+Near real-time update (run by hand, no raw data needed): `pipeline/live_update.py` downloads the FIRMS global
 NOAA-20 near real-time file, keeps the points inside each country (Natural Earth borders rasterized to 0.01°,
-`pipeline/borders.py`), removes known industrial sites, adds the new detections (`pipeline/live_update.py`),
-commits only when something changed, and redeploys the site. No raw data are needed for this step.
-The same job updates the forecast (`pipeline/forecast_update.py`): it moves the stored fire weather codes
+`pipeline/borders.py`), removes known industrial sites and adds the new detections; it rewrites files only
+when something changed. Commit and push to redeploy the site.
+`pipeline/forecast_update.py` updates the forecast: it moves the stored fire weather codes
 forward with NASA POWER days, adds the Open-Meteo forecast (bias-corrected per lead day) and writes
 `public/data/{CC}/forecast.json`. The forecast model of a country is built locally with
 `pipeline/forecast_model.py` (after `pipeline/forecast_skill.py` has measured its skill).
@@ -109,7 +109,8 @@ Download the yearly country files from FIRMS ("Archive Download" for the current
 pip install -r requirements.txt
 python pipeline/build_data.py   # cells, models, recurrence, industrial masks
 python pipeline/live_base.py    # daily history for month-to-date comparisons, seed of the live data
-python pipeline/live_update.py  # near real-time update (what the daily job runs)
+python pipeline/live_update.py      # near real-time update
+python pipeline/forecast_update.py  # 7-day forecast after the last data day
 ```
 
 Tests:
@@ -121,7 +122,7 @@ npm run check
 ```
 
 Deployment: every push to `main` builds the site and publishes it on GitHub Pages
-(`.github/workflows/deploy.yml`); the daily data job calls the same workflow after it commits.
+(`.github/workflows/deploy.yml`).
 
 ## Data sources and credits
 

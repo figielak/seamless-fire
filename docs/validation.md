@@ -397,7 +397,7 @@ the hotspot files; season curves.
 
 ## 12. Near real-time updates (from November 2026)
 
-The site is updated every day by `.github/workflows/update-live.yml` (`pipeline/live_update.py`):
+The recent days are added by `pipeline/live_update.py` (run by hand, no raw data needed):
 the FIRMS global NOAA-20 near real-time file of the last 7 days is cut to the 8 countries, the
 frozen industrial mask removes rows without `type`, and new detections are added. S-NPP near
 real-time data end between 2026-10-31 (PL) and 2026-11-02, so the live period is NOAA-20 ×
@@ -508,7 +508,7 @@ to the seasonal level. ES, GR, UA, CL: measurement running (free API rate limits
 
 **Operation.** DC carries months of memory: restarting the codes 92 days before a day from start-up values
 leaves DC wrong by 86–106 units on average, so the state per point is stored (`live/forecast/state_{CC}.json`)
-and moved forward every day with NASA POWER only (about 3 days behind). The forecast starts the day after the
+and moved forward at each update with NASA POWER days only (about 3 days behind). The forecast starts the day after the
 last fire data day; the days between the state and that day use Open-Meteo lead 0. If the issue day is already
 past, the forecast issued on that day is taken from the archive (no later weather). The interval (80%) comes from
 the residual SD per lead in the test. Hindcast autumn 2026 (PT, POWER weather): correlation 0.38 with the daily

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # called by update-live.yml after it commits new data (its push does not start this workflow)
+  # can be called by another workflow with the commit to build
   workflow_call:
     inputs:
       ref:

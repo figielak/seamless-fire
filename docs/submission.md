@@ -4,7 +4,7 @@ Texts for the NASA Space Apps Challenge 2026 project page, one section per form 
 Challenge: Harmonization of MODIS and VIIRS Hot Spots. Team: Lone Pixel. Local event: Rzeszów.
 
 Before submitting: replace `[FULL NAME]`; check every link in a private window; add the optional
-forecast paragraph (now live) only while the daily forecast keeps running.
+forecast paragraph (live on the site); data are as of the last manual update (see the "Now" panel).
 
 ---
 
@@ -21,7 +21,7 @@ against the years both sensors flew, and we remove industrial heat sources that 
 up three quarters of Polish VIIRS "fires". The web app lets emergency managers, land managers and
 firefighters pick a country, a preset, a rectangle or a polygon drawn on the map, and see which months
 and years burned most, how the current month compares with the same days in earlier years, long-term
-trends, and where fires come back year after year at ~1 km. Data update every day from NASA FIRMS
+trends, and where fires come back year after year at ~1 km. Recent days come from NASA FIRMS
 near real-time feeds; everything can be downloaded as CSV.
 
 ## Link to Project Demo
@@ -71,9 +71,9 @@ polygon drawn on the map) and a date range. The app answers the questions in the
    2012; the harmonized series does not (2012/2011 ratio 0.85–1.12, Ukraine's drop is in raw MODIS too).
 4. *Custom areas.* The browser sums raw cell-days inside the area, then applies the model (an area gets
    its share of the country estimate before 2012, with a wider interval).
-5. *Today.* A daily GitHub Actions job downloads the FIRMS global NOAA-20 near real-time file, assigns
-   points to countries (Natural Earth borders, 99.75–99.997% agreement with the FIRMS country files),
-   removes industrial cells and redeploys the site. NOAA-20 is put on the S-NPP scale with a
+5. *Today.* One script, without raw data, downloads the FIRMS global NOAA-20 near real-time file, assigns
+   points to countries (Natural Earth borders, 99.75–99.997% agreement with the FIRMS country files)
+   and removes industrial cells; a push redeploys the site. NOAA-20 is put on the S-NPP scale with a
    per-country factor, because S-NPP near real-time data ended in November 2026.
 
 **Benefits.** One consistent view of 26 years instead of two incompatible records; honest uncertainty
@@ -91,7 +91,7 @@ one fire; very large fires saturate. 2000–2011 values are estimates with an in
 All evidence: `docs/validation.md` in the repository.
 
 **Forecast and places to watch.** A 7-day outlook of fire activity per country from the Canadian Fire Weather
-Index, computed from NASA POWER weather history and Open-Meteo forecasts and updated daily. Its skill was measured
+Index, computed from NASA POWER weather history and Open-Meteo forecasts, starting the day after the last fire data. Its skill was measured
 on real archived weather forecasts of 2024–2025 (Portugal: 32% better than the seasonal normal on day 1, 18% on
 day 7) and is shown next to the outlook. For the selected area, "Places to watch" ranks the ~1 km cells where
 vegetation fire happened most often at this time of year, weighted by the local fire weather of the coming days
@@ -108,7 +108,7 @@ audio are used; the site and slides contain no NASA logos or branding.
 
 - **FIRMS active fire data** (Fire Information for Resource Management System):
   MODIS Collection 6.1 (Terra, Aqua, 1 km) and VIIRS 375 m (Suomi NPP, NOAA-20), country yearly files
-  and Archive Download 2000–2026, and the global NOAA-20 near real-time file, downloaded daily.
+  and Archive Download 2000–2026, and the global NOAA-20 near real-time file for the most recent days.
   https://firms.modaps.eosdis.nasa.gov/
   We acknowledge the use of data from NASA's FIRMS, part of NASA's Earth Science Data and Information
   System (ESDIS).
