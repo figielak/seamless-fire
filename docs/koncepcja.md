@@ -1,7 +1,7 @@
 # Seamless Fire: koncepcja projektu
 
 **Wyzwanie:** Harmonization of MODIS and VIIRS Hot Spots (NASA Space Apps Challenge 2026)
-**Zespół:** Lone Pixel (solo)
+**Zespół:** Hot Spot (solo)
 
 **W jednym zdaniu:** narzędzie, które z dwóch niespójnych zapisów satelitarnych robi jedną,
 ciągłą historię pożarów od 2000 r. Pokazuje ją jako kalendarz z uczciwie zaznaczoną

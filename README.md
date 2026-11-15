@@ -5,7 +5,7 @@
 Live site: <https://figielak.github.io/seamless-fire/>
 
 Built for the NASA Space Apps Challenge 2026, challenge "Harmonization of MODIS and VIIRS Hot Spots",
-by team Lone Pixel (Rzeszów, Poland).
+by team Hot Spot (Rzeszów, Poland).
 
 ## The problem
 

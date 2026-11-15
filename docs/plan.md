@@ -1,7 +1,7 @@
 # NASA Space Apps 2026: plan projektu (wersja 3, Astro)
 
 **Wyzwanie:** Harmonization of MODIS and VIIRS Hot Spots
-**Projekt:** Seamless Fire · **Zespół:** Lone Pixel (solo)
+**Projekt:** Seamless Fire · **Zespół:** Hot Spot (solo)
 **Wydarzenie:** NASA Space Apps Challenge Rzeszów 2026, 14–15 listopada
 **Cel:** 1. miejsce lokalnie (5 000 zł) i projekt do portfolio
 

@@ -2,7 +2,7 @@
 
 Harmonized MODIS + VIIRS burning activity calendar (2000 → today) for a selected area.
 NASA Space Apps Challenge 2026, challenge "Harmonization of MODIS and VIIRS Hot Spots".
-Team "Lone Pixel" (solo), local event Rzeszów.
+Team "Hot Spot" (solo), local event Rzeszów.
 
 Full context:
 - `docs/plan.md`: method decisions, data contract, pages, work order, submission checklist

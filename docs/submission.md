@@ -1,7 +1,7 @@
 # Space Apps submission texts
 
 Texts for the NASA Space Apps Challenge 2026 project page, one section per form field.
-Challenge: Harmonization of MODIS and VIIRS Hot Spots. Team: Lone Pixel. Local event: Rzeszów.
+Challenge: Harmonization of MODIS and VIIRS Hot Spots. Team: Hot Spot. Local event: Rzeszów.
 
 Before submitting: replace `[FULL NAME]`; check every link in a private window; data are as of the
 last manual update (see the "Now" panel).

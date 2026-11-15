@@ -27,6 +27,9 @@ Updated: 2026-11-15 ~10:25
 
 ## Next step
 
+- 2026-11-15 ~11:00: Quick tour for the jury (`index.astro`: dialog on first visit, `localStorage` key `seamless-fire.tour-seen`,
+  `?notour` skips it; "▶ Quick tour" in the header; 6 one-click steps with a hint bar above the chart tabs). Not committed yet.
+
 - Usefulness review 10:30 (`.planning/REVIEW_usefulness.md`), all items A–E done 10:40 (user: "do everything"):
   large-fire flag + 3 ranking modes, drift term in intervals (models rebuilt with `--model-only`), texts. Check live after push.
 

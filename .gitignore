@@ -21,3 +21,6 @@ __pycache__/
 
 # Playwright MCP screenshots/logs
 .playwright-mcp/
+
+# Personal study notes (Polish), not published
+.planning/przewodnik/
