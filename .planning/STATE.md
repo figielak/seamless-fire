@@ -29,7 +29,7 @@ Updated: 2026-11-15 ~10:15
 
 - Before 13:00: optionally refresh NRT data once more (15 Nov becomes complete in FIRMS only later); fill
   `[FULL NAME]` and the demo link in `docs/submission.md`; check links in a private window.
-- UX review: all 12 points addressed; only a nice-to-have left (the preliminary marker colour looks green).
+- UX review: all 12 points addressed (preliminary marker fixed: orange, was default green).
 - Known limit: `live/nrt/{CC}.csv` and `live.json` grow every day (AU ~8k rows/day in season). Every few months rebuild
   the base locally with newer FIRMS files (move `LAST_COMPLETE_MONTH`, rerun build_data + live_base) to fold live months in.
 

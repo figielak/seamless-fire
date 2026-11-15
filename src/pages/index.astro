@@ -1509,11 +1509,12 @@ import Base from '../layouts/Base.astro';
       {
         type: 'scatter', mode: 'markers', x: preX, y: preY, name: 'preliminary',
         hoverinfo: 'skip',
-        marker: { symbol: 'circle-open', size: 10, line: { width: 2, color: '#f28e2b' } },
+        // "-open" symbols take their stroke colour from marker.color (else the default trace colour, green)
+        marker: { symbol: 'circle-open', size: 10, color: '#f28e2b', line: { width: 2, color: '#f28e2b' } },
       },
       {
         type: 'scatter', mode: 'markers', x: [], y: [], name: 'on the map', hoverinfo: 'skip',
-        marker: { symbol: 'square-open', size: 16, line: { width: 2.5, color: '#e8432e' } },
+        marker: { symbol: 'square-open', size: 16, color: '#e8432e', line: { width: 2.5, color: '#e8432e' } },
       },
       {
         type: 'scatter', mode: 'markers', x: partX, y: partY, name: 'month to date', hoverinfo: 'skip',
