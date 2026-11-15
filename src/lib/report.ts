@@ -26,7 +26,7 @@ export const fmt = (v: number) =>
   v >= 100 ? Math.round(v).toLocaleString('en-US') : v >= 10 ? v.toFixed(0) : v.toFixed(1);
 const pctStr = (v: number) =>
   `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v) >= 10 ? Math.abs(v).toFixed(0) : Math.abs(v).toFixed(1)}%`;
-const ratioStr = (r: number) => `${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×`;
+const ratioStr = (r: number) => (r >= 10 ? r.toFixed(0) : r.toFixed(1));
 const pStr = (p: number) => (p < 0.001 ? 'p < 0.001' : `p = ${p.toFixed(p < 0.01 ? 3 : 2)}`);
 const monthLabel = (ym: string) => `${MONTHS_LONG[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const plural = (c: number) => (c === 2 ? 'Marches' : `${MONTHS_LONG[c]}s`);
@@ -275,7 +275,7 @@ export function summarize(r: ReportInput): ReportSummary {
     const m = r.mtd;
     const span = `1–${m.throughDay} ${MONTHS[Number(m.month.slice(5, 7)) - 1]} ${m.month.slice(0, 4)}`;
     if (m.value === 0) lines.push(`Now (${span}): <b>no fire cell-days so far</b>; typical for these days: ${fmt(m.median!)} (median ${m.refFrom}–${m.refTo}, usual range ${fmt(m.p10!)}–${fmt(m.p90!)}); preliminary near real-time data.`);
-    else lines.push(`Now (${span}): <b>${fmt(m.value)} cell-days, ${ratioStr(m.ratio!)} typical</b> for these days ` +
+    else lines.push(`Now (${span}): <b>${fmt(m.value)} cell-days, anomaly index ${ratioStr(m.ratio!)}</b> (1 = typical) for these days ` +
       `(median ${m.refFrom}–${m.refTo}: ${fmt(m.median!)}, usual range ${fmt(m.p10!)}–${fmt(m.p90!)}); preliminary near real-time data.`);
   } else {
     // last complete month of the series
@@ -283,14 +283,14 @@ export function summarize(r: ReportInput): ReportSummary {
     while (i > 0 && h.partial[i]) i--;
     const s = monthStats(h, i);
     if (s.ratio !== null) {
-      lines.push(`Latest complete month, ${monthLabel(s.month)}: <b>${fmt(s.value)} cell-days, ${ratioStr(s.ratio)} typical</b> ` +
+      lines.push(`Latest complete month, ${monthLabel(s.month)}: <b>${fmt(s.value)} cell-days, anomaly index ${ratioStr(s.ratio)}</b> (1 = typical) ` +
         `(median ${s.refFrom}–${s.refTo}: ${fmt(s.median!)}).`);
     }
   }
   if (r.season?.last && r.season.last.ratio !== null) {
     const l = r.season.last;
     lines.push(`This season (since 1 January ${r.season.year}): ${fmt(l.value)} cell-days, ` +
-      `${ratioStr(l.ratio!)} the median of ${l.nYears} earlier years (above ${Math.round(l.percentile)}% of them).`);
+      `${ratioStr(l.ratio!)}× the median of ${l.nYears} earlier years (above ${Math.round(l.percentile)}% of them).`);
   }
   const pm = r.places?.months.filter((m) => m.top.length) ?? [];
   if (pm.length) {
@@ -521,9 +521,9 @@ export function reportHtml(r: ReportInput, s: ReportSummary = summarize(r)): str
     : '<p class="note">A trend needs at least 8 complete years in the selected period.</p>';
 
   const anomRows = s.anomalies.length
-    ? `<table><tr><th>#</th><th>Month</th><th class="num">Cell-days</th><th class="num">× typical</th><th class="num">Typical</th><th class="num">Percentile</th><th>Notes</th></tr>
+    ? `<table><tr><th>#</th><th>Month</th><th class="num">Cell-days</th><th class="num">Anomaly index</th><th class="num">Typical</th><th class="num">Percentile</th><th>Notes</th></tr>
       ${s.anomalies.map((a, i) => `<tr><td>${i + 1}</td><td>${monthLabel(a.month)}</td><td class="num">${fmt(a.value)}</td><td class="num">${a.estimated ? '≥' : ''}${ratioStr(a.rankRatio)}</td><td class="num">${fmt(a.median!)}</td><td class="num">${Math.round(a.percentile)}%</td><td>${[a.estimated ? 'estimated' : '', a.preliminary ? 'preliminary' : '', a.lowQuality ? 'sensor problem' : ''].filter(Boolean).join(', ')}</td></tr>`).join('')}</table>
-      <p class="note">× typical = (x + k) / (median + k): the month against the median of the same calendar month in the 10 years before it (k is a small constant scaled to the area, so that near-zero months do not dominate). Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥). Percentile among the same calendar month of all years.</p>`
+      <p class="note">Anomaly index = (x + k) / (median + k), 1 = typical: the month against the median of the same calendar month in the 10 years before it (k is a small constant scaled to the area, so that near-zero months do not dominate; it is therefore not a plain "times more"). Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥). Percentile among the same calendar month of all years.</p>`
     : '<p class="note">Not enough history in the selected period.</p>';
 
   const p = s.profile;

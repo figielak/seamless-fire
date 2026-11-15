@@ -270,6 +270,7 @@ export class AreaMap {
   private lastView = '';
   private cells = new CellCanvas();
   private legend: HTMLElement;
+  private watchNote = '';
   private lookup: ((lat: number, lon: number) => number) | null = null;
   private layerInfo: { title: string; scale: CellScale; empty: boolean } | null = null;
   private cellDeg = 0.1;
@@ -393,9 +394,15 @@ export class AreaMap {
     this.hover(null);
   }
 
-  /** Numbered markers of the places to watch (null = remove). Popup = `info` of each place. */
-  setWatch(places: { lat: number; lon: number; info: string }[] | null) {
+  /**
+   * Numbered markers of the places to watch (null = remove). Popup = `info` of each place.
+   * `note` is the legend line, e.g. the forecast days, so the markers are not read as part of the
+   * historical background layer.
+   */
+  setWatch(places: { lat: number; lon: number; info: string }[] | null, note = '') {
     this.watchLayer.clearLayers();
+    this.watchNote = places?.length ? note : '';
+    this.hover(null);
     (places ?? []).forEach((p, i) => {
       L.marker([p.lat, p.lon], {
         icon: L.divIcon({ className: 'watch-pin', html: `<span>${i + 1}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
@@ -451,7 +458,10 @@ export class AreaMap {
       const ring = this.rings.size ? this.rings.get(this.ringKey(ll.lat, ll.lng)) : undefined;
       if (ring) cell += `<br><span class="lg-ringtxt">Year-round fire (${Math.round(ring.share * 100)}% of all months): likely industrial</span>`;
     }
-    this.legend.innerHTML = `<div class="lg-title">${title}</div>
+    const watch = this.watchNote;
+    this.legend.innerHTML = `${watch ? `<div class="lg-watch"><span class="lg-pin">1</span>${watch}</div>
+        <div class="lg-bg">Background map (history, not a forecast):</div>` : ''}
+        <div class="lg-title">${title}</div>
         <div class="lg-bar" style="background-image:linear-gradient(90deg,${ramp})"></div>
         <div class="lg-ticks"><span>0</span>${ticks.map((t) =>
           `<span style="left:${(scaleT(t, scale) * 100).toFixed(1)}%">${t}</span>`).join('')}

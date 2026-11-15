@@ -121,15 +121,17 @@ import Base from '../layouts/Base.astro';
         <button type="button" role="tab" data-tab="season" aria-selected="false">This season</button>
         <button type="button" role="tab" data-tab="forecast" aria-selected="false">Next 7 days</button>
         <button type="button" role="tab" data-tab="anomalies" aria-selected="false">Top anomalies</button>
-        <button type="button" role="tab" data-tab="about" aria-selected="false">How to read it</button>
+        <button type="button" role="tab" data-tab="about" aria-selected="false">How to read</button>
       </div>
       <div class="dock-body">
         <div class="tab" data-tab="calendar">
+          <p class="def"><b>1 cell-day</b> = one ~11 km grid cell with at least one vegetation fire detection on one day.
+            It measures how widespread fire activity was: <b>not hectares burned, not a number of fires</b>.</p>
           <div class="cal-head">
             <p class="unit"><span id="calendar-unit">fire cell-days per month, VIIRS S-NPP scale</span>. Click a month to map it.</p>
             <div class="view-toggle small-toggle cal-toggle" role="group" aria-label="Calendar colours">
               <button type="button" data-cal="value" aria-pressed="true" title="Colour = number of fire cell-days">Cell-days</button>
-              <button type="button" data-cal="anom" aria-pressed="false" title="Colour = month compared with its typical level">vs typical</button>
+              <button type="button" data-cal="anom" aria-pressed="false" title="Colour = anomaly index: month compared with its typical level">vs typical</button>
             </div>
           </div>
           <div id="calendar" class="calendar"></div>
@@ -147,18 +149,20 @@ import Base from '../layouts/Base.astro';
           <p class="note" id="season-note"></p>
         </div>
         <div class="tab" data-tab="forecast" hidden>
+          <div id="watch" class="watch"></div>
+          <h3 class="fc-title">Whole country, next 7 days</h3>
           <p class="unit">Expected fire cell-days per day for the whole country, from the fire weather forecast, starting the day after the last fire data (VIIRS S-NPP scale).</p>
           <p id="forecast-head" class="forecast-head"></p>
           <div id="forecast" class="annual"></div>
           <p class="note" id="forecast-note"></p>
-          <div id="watch" class="watch"></div>
         </div>
         <div class="tab" data-tab="anomalies" hidden>
-          <p class="unit">Months most above their usual level, in the selected period. Click a row to map it.</p>
+          <p class="unit">Months most above their usual level (anomaly index), in the selected period. This is not the list of the largest months: see "Highest" below the table. Click a row to map it.</p>
           <div id="anomalies"></div>
           <p class="note">
-            × typical = (value + k) / (median + k), median of the same calendar month in the 10 years
-            before. k is a small offset that scales with the area, so tiny counts do not explode.
+            <b>Anomaly index</b> = (cell-days + k) / (typical + k); 1 = typical. Typical = median of the same
+            calendar month in the 10 years before. k is a small offset that scales with the area, so tiny
+            counts do not explode; the index is therefore not a plain "times more" (10 vs typical 2 can give 3.0).
             Estimated months (before 2012) are ranked by the lower end of their ~80% interval (≥): only
             the anomaly the estimate supports. In small areas this leaves out most estimated months.
           </p>
@@ -595,6 +599,17 @@ import Base from '../layouts/Base.astro';
       animation: none;
     }
   }
+  /* Laptop screens (1280 px wide): a compact "Now" strip and tabs, so the calendar fits. */
+  @media (min-width: 1151px) and (max-width: 1440px) {
+    .dock-tabs [role='tab'] {
+      padding: 0.3rem 0.4rem;
+      font-size: 0.88rem;
+    }
+    .now {
+      padding: 0.4rem 0.8rem;
+      gap: 0.3rem 1rem;
+    }
+  }
   .dock-body {
     flex: 1;
     overflow-y: auto;
@@ -604,6 +619,15 @@ import Base from '../layouts/Base.astro';
     color: var(--muted);
     font-size: 0.85rem;
     margin: 0.2rem 0;
+  }
+  .dock-body .def {
+    font-size: 0.8rem;
+    line-height: 1.35;
+    margin: 0.3rem 0 0.1rem;
+    padding: 0.25rem 0.5rem;
+    border-left: 3px solid var(--head);
+    background: #f3f6f9;
+    border-radius: 0 4px 4px 0;
   }
   .cal-head {
     display: flex;
@@ -692,9 +716,26 @@ import Base from '../layouts/Base.astro';
   .trend p {
     margin: 0.3rem 0;
   }
-  .watch h3 {
+  .watch h3,
+  .fc-title {
     font-size: 1rem;
-    margin: 1rem 0 0.3rem;
+    margin: 0.6rem 0 0.3rem;
+  }
+  .fc-title {
+    margin-top: 1.2rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--line);
+  }
+  .watch-lead {
+    margin: 0.2rem 0 0.4rem;
+    font-size: 0.88rem;
+  }
+  .watch-table:not(.all) tr.more {
+    display: none;
+  }
+  .watch-more {
+    margin: 0.3rem 0;
+    font-size: 0.85rem;
   }
   .watch-pin span {
     display: flex;
@@ -915,6 +956,24 @@ import Base from '../layouts/Base.astro';
     color: var(--muted);
     margin: 0.1rem 0 0;
   }
+  @media (min-width: 1151px) and (max-width: 1440px) {
+    section.now .now-head {
+      flex: 1 1 100%;
+      border-right: 0;
+      padding-right: 0;
+    }
+    section.now .now-fig b {
+      font-size: 1.35rem;
+    }
+    section.now dl {
+      margin-left: 0;
+      padding-left: 1rem;
+      gap: 0.2rem 1.1rem;
+    }
+    section.now dd {
+      font-size: 1.05rem;
+    }
+  }
   .map-legend {
     background: rgba(255, 255, 255, 0.93);
     border-radius: 6px;
@@ -974,6 +1033,31 @@ import Base from '../layouts/Base.astro';
     border-radius: 50%;
     border: 2px solid #22d3ee;
     background: #0b1a2b;
+  }
+  .map-legend .lg-watch {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    padding-bottom: 0.3rem;
+    margin-bottom: 0.3rem;
+    border-bottom: 1px solid #d0d7de;
+  }
+  .map-legend .lg-pin {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e8432e;
+    color: #fff;
+    font-size: 10px;
+  }
+  .map-legend .lg-bg {
+    font-size: 11px;
+    color: #57606a;
   }
   .map-legend .lg-ringtxt {
     color: #0e7490;
@@ -1160,10 +1244,11 @@ import Base from '../layouts/Base.astro';
 
   // ------------------------------------------------------------------ "Now" panel
 
-  /** "× typical" figure and the history lines shared by full months and month to date. */
+  /** Anomaly index figure and the history lines shared by full months and month to date. */
   function compareHtml(
     s: { ratio: number | null; median: number | null; p10: number | null; p90: number | null; percentile: number;
       nAll: number; refFrom: number; refTo: number },
+    value: number,
     what: string, // "the usual October" / "1–13 November in earlier years"
     rankOf: string, // "26 Octobers" / "15 years (1–13 Nov)"
   ): string {
@@ -1171,14 +1256,21 @@ import Base from '../layouts/Base.astro';
     const r = s.ratio;
     const word = r >= 1.25 ? 'above' : r <= 0.8 ? 'below' : 'close to';
     const cls = r >= 1.25 ? 'hi' : r <= 0.8 ? 'lo' : 'mid';
+    const typical = `<div><dt>typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>`;
+    if (value === 0) {
+      // Nothing detected: a rank among zeros says nothing, state it plainly.
+      return `
+        <div class="now-fig mid"><b>No detections so far</b><span>${s.median === 0 ? 'usual for this time of year' : 'in this period'}</span></div>
+        <dl>${typical}</dl>`;
+    }
     return `
-        <div class="now-fig ${cls}"><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b>
-          <span>typical, ${word} ${what}</span></div>
+        <div class="now-fig ${cls}" title="Anomaly index = (value + k) / (median + k); 1 = typical. k is a small offset that keeps tiny counts from exploding, so this is not a plain ratio."><b>${r >= 10 ? r.toFixed(0) : r.toFixed(1)}</b>
+          <span>anomaly index (1 = typical), ${word} ${what}</span></div>
         <dl>
-          <div><dt>typical (median ${s.refFrom}–${s.refTo})</dt><dd>${fmt(s.median!)}</dd></div>
-          <div><dt>usual range (P10–P90)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
-          <div><dt>rank among ${rankOf}</dt>
-          <dd>above ${Math.round(s.percentile)}%</dd></div>
+          ${typical}
+          <div><dt>usual range (middle 80% of years)</dt><dd>${fmt(s.p10!)} – ${fmt(s.p90!)}</dd></div>
+          <div><dt>of ${rankOf} were lower</dt>
+          <dd>${Math.round(s.percentile)}%</dd></div>
         </dl>`;
   }
 
@@ -1217,7 +1309,7 @@ import Base from '../layouts/Base.astro';
       const prevName = MONTHS_LONG[monthAbs(prev.month) % 12];
       const prevLine = prev.ratio === null ? '' :
         ` · last full month ${monthLabel(prev.month)}: ${fmt(prev.value)} cell-days,
-          ${prev.ratio >= 10 ? prev.ratio.toFixed(0) : prev.ratio.toFixed(1)}× the usual ${prevName}`;
+          anomaly index ${prev.ratio >= 10 ? prev.ratio.toFixed(0) : prev.ratio.toFixed(1)} vs the usual ${prevName}`;
       const head = `
       <div class="now-head">
         ${title}
@@ -1234,7 +1326,7 @@ import Base from '../layouts/Base.astro';
           const st = mtdStats(h.value[idx], hist, info, d.model, days.size, monthStats(h, idx).k);
           const gapNote = days.size < info.throughDay
             ? `<p class="note">${info.throughDay - days.size} day(s) without data are left out of both sides.</p>` : '';
-          nowEl.innerHTML = head + compareHtml(st, `${span} in earlier years`, `${st.nAll} years (${span}, ${st.firstYear}–${ym.slice(0, 4)})`) + gapNote;
+          nowEl.innerHTML = head + compareHtml(st, h.value[idx], `${span} in earlier years`, `${st.nAll} years (${span}, ${st.firstYear}–${ym.slice(0, 4)})`) + gapNote;
         } catch (err) {
           console.error(err);
           if (token === nowToken) nowEl.innerHTML = head + `<p class="note">The comparison with earlier years could not be loaded.</p>`;
@@ -1260,7 +1352,7 @@ import Base from '../layouts/Base.astro';
           ${escapeHtml(d.model.model)}${areaNote}</p>
       </div>
       <div class="now-fig"><b>${fmt(s.value)}</b><span>fire cell-days${interval}</span></div>
-      ${compareHtml(s, `the usual ${calName}`, `${s.nAll} ${calName}s`)}`;
+      ${compareHtml(s, s.value, `the usual ${calName}`, `${s.nAll} ${calName}s`)}`;
     nowEl.hidden = false;
   }
 
@@ -1306,8 +1398,16 @@ import Base from '../layouts/Base.astro';
         `<b>${MONTHS[c]} ${years[r]}</b>`,
         h.raw
           ? `${a < monthAbs(d.model.viirs_first_month) ? 'Raw MODIS' : 'Raw VIIRS'}: <b>${fmt(v)}</b> cell-days`
-          : `${h.estimated[i] ? 'Estimated' : 'Observed'}: <b>${fmt(v)}</b> cell-days`,
+          : h.estimated[i]
+            ? `<b>${fmt(v)}</b> cell-days, likely ${fmt(h.lo[i])} – ${fmt(h.hi[i])} (~80%)`
+            : `<b>${fmt(v)}</b> cell-days`,
       ];
+      if (!h.raw) {
+        lines.push(`Source: ${h.estimated[i] ? '<b>estimated</b> from MODIS by the model'
+          : a > lastComplete ? 'observed, NOAA-20' : 'observed, VIIRS S-NPP'}`);
+        lines.push(`Status: ${part ? 'month to date, preliminary' : h.preliminary[i] ? '<b>preliminary</b> (near real-time, may change)'
+          : h.lowQuality[i] ? '<b>known sensor problem</b>' : 'final archive data'}`);
+      }
       if (part && liveInfo) {
         lines.push(`So far: 1–${liveInfo.throughDay} ${MONTHS[c]} (month to date)`, 'Comparison with earlier years: see "Now"');
         partX.push(c); partY.push(years[r]);
@@ -1317,17 +1417,16 @@ import Base from '../layouts/Base.astro';
       }
       if (st.ratio !== null) {
         const rt = st.ratio >= 10 ? st.ratio.toFixed(0) : st.ratio.toFixed(1);
-        lines.push(`<b>${rt}×</b> typical (median ${st.refFrom}–${st.refTo}: ${fmt(st.median!)})`);
+        lines.push(`Typical: ${fmt(st.median!)} (median ${st.refFrom}–${st.refTo}) · anomaly index <b>${rt}</b>`);
       } else if (anom) lines.push('Not enough earlier years for a typical value');
-      if (h.estimated[i]) lines.push(`~80% interval: ${fmt(h.lo[i])} – ${fmt(h.hi[i])}`);
       lines.push(
         `Raw MODIS: ${raw(h.modis[i], a, modisFrom, modisTo)}, raw VIIRS: ${rawV(h.viirs[i], a)}`,
       );
-      if (h.viirsDet && !h.estimated[i]) lines.push(`${a > lastComplete ? 'NOAA-20' : 'VIIRS'} detections: ${fmt(h.viirsDet[i])}`);
+      if (h.viirsDet && !h.estimated[i]) lines.push(`${a > lastComplete ? 'NOAA-20' : 'VIIRS S-NPP'} detections${h.area ? ' in the area (cell centres inside)' : ''}: ${fmt(h.viirsDet[i])}`);
       if (h.terraOnly[i]) lines.push('Terra only (before Aqua), scaled up');
-      if (h.lowQuality[i]) { lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
+      if (h.lowQuality[i]) { if (h.raw) lines.push('Known sensor problem'); lowX.push(c); lowY.push(years[r]); }
       if (h.preliminary[i]) {
-        lines.push('Preliminary (near real-time)');
+        if (h.raw) lines.push('Preliminary (near real-time)');
         if (!part) { preX.push(c); preY.push(years[r]); }
       }
       text[r][c] = lines.join('<br>');
@@ -1363,9 +1462,9 @@ import Base from '../layouts/Base.astro';
             zmin: -ANOM_LOG2,
             zmax: ANOM_LOG2,
             colorbar: {
-              title: { text: '× typical', side: 'right' },
+              title: { text: 'anomaly index', side: 'right' },
               tickvals: [-2, -1, 0, 1, 2],
-              ticktext: ['¼ or less', '½', '1 (typical)', '2×', '4× or more'],
+              ticktext: ['¼ or less', '½', '1 (typical)', '2', '4 or more'],
               thickness: 12,
             },
           }
@@ -1415,9 +1514,11 @@ import Base from '../layouts/Base.astro';
     // width 0 = calendar tab hidden while rendering; it is re-rendered when the tab is shown
     const narrow = calEl.clientWidth > 0 && calEl.clientWidth < 560;
     // Fit all years into the chart panel when it has room (rows 16–30 px), else let it scroll.
+    // avail = room below the definition and toggle, minus the note under the calendar.
     const body = calEl.closest<HTMLElement>('.dock-body');
-    const avail = body && body.clientHeight > 300 ? body.clientHeight - 80 : 0;
-    const rowH = avail ? Math.min(30, Math.max(16, Math.floor((avail - 100) / years.length))) : 20;
+    const above = body ? calEl.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop : 0;
+    const avail = body && body.clientHeight > 300 ? body.clientHeight - above - 48 : 0;
+    const rowH = avail ? Math.min(30, Math.max(11, Math.floor((avail - 100) / years.length))) : 20;
     const calH = Math.max(260, years.length * rowH + 100);
     calEl.style.height = `${calH}px`; // Plots.resize autosizes to the container
     const layout: Partial<Plotly.Layout> = {
@@ -1459,7 +1560,7 @@ import Base from '../layouts/Base.astro';
     if (anom) {
       $('calendar-unit').textContent = 'month vs its typical level';
       const blank = z.flat().some((v) => v === null);
-      noteEl.innerHTML = '× typical = (value + k) / (median + k), median of the same month in the 10 years before, ' +
+      noteEl.innerHTML = 'Anomaly index = (cell-days + k) / (typical + k), typical = median of the same month in the 10 years before, ' +
         'as in Top anomalies. Red: above the usual level, blue: below. Always harmonized values.' +
         (blank ? ' Blank: fewer than 5 earlier years to compare with.' : '');
       return;
@@ -1806,6 +1907,7 @@ import Base from '../layouts/Base.astro';
     const lastDay = info?.last ?? `${d.model.last_complete_month}-${daysInMonth(d.model.last_complete_month)}`;
     const days = f ? f.days.map((x) => x.date) : Array.from({ length: 7 }, (_, i) => addDays(lastDay, i + 1));
     const weights = seasonWeights(days);
+    alignMapWithForecast(days);
     const shape = resolveShape(state.area);
     const label = areaLabel(state.area) ?? country.name;
     el.innerHTML = '<p class="note">Finding places to watch…</p>';
@@ -1843,28 +1945,51 @@ import Base from '../layouts/Base.astro';
         areaMap?.setWatch(null);
         return;
       }
-      const rows = places.map((p, i) => `<tr><td>${i + 1}</td>
+      const rows = places.map((p, i) => `<tr${i >= 3 ? ' class="more"' : ''}><td>${i + 1}</td>
           <td><a href="${osm(p)}" target="_blank" rel="noopener">${deg(p.lat, 'N', 'S')}, ${deg(p.lon, 'E', 'W')}</a></td>
           <td>${Math.round(p.recurrence * 100)}%</td>
           <td>${p.factor === null ? '–' : `×${p.factor.toFixed(2)}`}</td></tr>`).join('');
       el.innerHTML = `<h3>Places to watch in ${escapeHtml(label)}, ${shortDay(days[0])}–${shortDay(days[days.length - 1])}</h3>
-        <p>${wxLine}</p>
-        <div class="table-wrap"><table class="anom"><thead><tr><th>#</th><th>Place (~1 km cell)</th>
+        <p class="watch-lead"><b>A ranking of places to watch, not a probability of fire.</b> Numbers match the markers on the map.</p>
+        <div class="table-wrap"><table class="anom watch-table"><thead><tr><th>#</th><th>Place (~1 km cell, opens the map)</th>
           <th>Years with fire, ${season}</th><th>Weather</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ${places.length > 3 ? `<button type="button" class="watch-more" aria-expanded="false">Show all ${places.length} places</button>` : ''}
+        <p>${wxLine}</p>
         <p class="note">Ranked by how often vegetation fire happened in the cell at this time of year (share of years,
           ${season}; the months next to the forecast days count half; VIIRS S-NPP, since 2012)
           ${pts ? '× the local fire weather of these 7 days (×1 = usual for the season; nearest forecast points)' : ''}.
-          Year-round fire (likely industrial) is left out. A ranking of places to watch, not a probability of fire.
-          Numbers match the markers on the map.</p>`;
+          Year-round fire (likely industrial) is left out.</p>`;
+      el.querySelector<HTMLButtonElement>('.watch-more')?.addEventListener('click', (e) => {
+        const b = e.currentTarget as HTMLButtonElement;
+        const open = el.querySelector('.watch-table')!.classList.toggle('all');
+        b.setAttribute('aria-expanded', String(open));
+        b.textContent = open ? 'Show top 3 only' : `Show all ${places.length} places`;
+      });
       areaMap?.setWatch(places.map((p, i) => ({
         lat: p.lat, lon: p.lon,
         info: `<b>Place to watch ${i + 1}</b><br>` + p.byMonth.map((m) => `Fire in ${m.years} of ${m.of} ${plural(m.cal)}`).join('<br>') + ' (VIIRS)' +
           (p.factor !== null ? `<br>Fire weather next 7 days: ×${p.factor.toFixed(2)} usual, FWI ${p.fwi!.toFixed(1)}` : '') +
           `<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°`,
-      })));
+      })), `Numbered: places to watch, ${shortDay(days[0])}–${shortDay(days[days.length - 1])} (forecast week)`);
     } catch (err) {
       console.error(err);
       if (token === watchToken) el.innerHTML = '<p class="note">Places to watch could not be loaded.</p>';
+    }
+  }
+
+  /**
+   * The forecast tab shows forecast markers over the map layer; keep that layer about the same time of
+   * year: Recurrence follows the forecast's calendar month, "Month" shows the latest month.
+   */
+  function alignMapWithForecast(days: string[]) {
+    if (!current || !days.length) return;
+    if (mapMode === 'recur') {
+      const cal = Number(days[Math.floor(days.length / 2)].slice(5, 7)) - 1;
+      if (cal !== recMonth) { recMonth = cal; updateMapLayer(); }
+    } else if (mapMode === 'month') {
+      const first = monthAbs(current.h.firstMonth);
+      const last = first + current.h.value.length - 1;
+      if (selAbs !== last && last <= first + current.toIdx) { selAbs = last; updateMapLayer(); }
     }
   }
 
@@ -1891,12 +2016,12 @@ import Base from '../layouts/Base.astro';
       ].filter(Boolean).join(', ');
       const r = a.rankRatio;
       return `<tr data-month="${a.month}" title="Show on the map"><td>${i + 1}</td><td>${shortMonth(a.month)}</td><td>${fmt(a.value)}</td>
-        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${a.estimated ? '≥' : ''}${r >= 10 ? r.toFixed(0) : r.toFixed(1)}×</b></td>
-        <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}%</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
+        <td class="bar-cell"><span class="bar" style="width:${((r / maxR) * 100).toFixed(1)}%"></span><b>${a.estimated ? '≥' : ''}${r >= 10 ? r.toFixed(0) : r.toFixed(1)}</b></td>
+        <td>${fmt(a.median!)}</td><td>${Math.round(a.percentile)}% of years</td>${anyFlag ? `<td class="flags">${flags}</td>` : ''}</tr>`;
     });
     anomEl.innerHTML = `<div class="table-wrap"><table class="anom">
-      <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th>× typical</th><th>Typical</th>
-      <th>Percentile</th>${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+      <thead><tr><th>#</th><th>Month</th><th>Cell-days</th><th title="(value + k) / (median + k); 1 = typical. Not a plain ratio: k keeps tiny counts from exploding.">Anomaly index ⓘ</th><th>Typical</th>
+      <th title="Share of the same calendar month in all years that was lower">Higher than</th>${anyFlag ? '<th>Notes</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }
 
   // ------------------------------------------------------------------ export
@@ -2230,7 +2355,15 @@ import Base from '../layouts/Base.astro';
       const all = (await Promise.all(files.map((f) => loadHotYear(country.code, f)))).flat();
       if (token !== hotToken) return;
       const pts = all.filter((p) => p.date.startsWith(ym));
-      areaMap.setHotspots(pts, `${pts.length.toLocaleString('en-US')} hotspot detections (vegetation), click a point`);
+      const n = (v: number) => v.toLocaleString('en-US');
+      const shape = resolveShape(state.area);
+      let note = `${n(pts.length)} hotspot detections (vegetation, all sensors) in the whole country, click a point`;
+      if (shape) {
+        const keep = keepFn(shape);
+        const inside = pts.reduce((c, p) => c + (keep(p.lat, p.lon) ? 1 : 0), 0);
+        note = `Hotspot points (all sensors): ${n(pts.length)} in the whole country, <b>${n(inside)} inside the area outline</b>; click a point`;
+      }
+      areaMap.setHotspots(pts, note);
     } catch {
       if (token === hotToken) areaMap.setHotspots(null, 'Hotspot points could not be loaded');
     }

@@ -92,6 +92,21 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
     <a href={repo}>validation report</a>.
   </p>
 
+  <section class="card why">
+    <h2>The decision in three sentences</h2>
+    <ol class="why-list">
+      <li><b>Problem:</b> MODIS (since 2000) and VIIRS (since 2012) count fires very differently, so a naive
+        series jumps in 2012 and years before and after cannot be compared.</li>
+      <li><b>Test:</b> five ways to put MODIS on the VIIRS scale (A–E below) were each asked to predict a hidden
+        VIIRS year from MODIS alone, the same task as rebuilding 2000–2011, in all eight countries.</li>
+      <li><b>Choice:</b> the log-log model per country (D, or E with seasons) had the lowest <i>monthly</i> error
+        everywhere, often half that of simple ratios, and the calendar is read month by month, so the monthly
+        error decided.</li>
+    </ol>
+    <p class="note">Unit everywhere: <b>fire cell-days</b>, how widespread fire activity was. It is not burned area,
+      not a number of fires and not damage.</p>
+  </section>
+
   <section class="card">
     <h2>In five steps</h2>
     <ol class="steps">
@@ -162,15 +177,23 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
         <b>C</b>: ratio per country and calendar month</li>
       <li><b>D</b>: log-log model per country; <b>E</b>: as D with a seasonal intercept</li>
     </ul>
+    <p>
+      Two errors per method, <b>lower = better</b>: <b>year</b> = typical error of the annual total
+      (%); <b>month</b> = monthly log-RMSE, the typical error of a single month in log space
+      (0.10 ≈ ±10%, 0.43 ≈ a factor of 1.5, 1.1 ≈ a factor of 3). The chosen method is highlighted.
+    </p>
     <div class="table-wrap">
-      <table>
+      <table class="cmp">
         <thead>
           <tr>
-            <th>Country</th>
-            {METHODS.map((k) => <th>{k}</th>)}
-            <th>Chosen</th>
-            <th>b</th>
-            <th>Backtest</th>
+            <th rowspan="2">Country</th>
+            {METHODS.map((k) => <th colspan="2" class="grp">{k}</th>)}
+            <th rowspan="2">Chosen</th>
+            <th rowspan="2">b</th>
+            <th rowspan="2">Backtest</th>
+          </tr>
+          <tr>
+            {METHODS.map(() => <><th class="sub">year</th><th class="sub">month</th></>)}
           </tr>
         </thead>
         <tbody>
@@ -178,9 +201,10 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
             <tr>
               <td>{code}</td>
               {METHODS.map((k) => (
-                <td class={k === m.model ? 'chosen' : ''}>
-                  {pct(m.methods[k].loyo_annual)} · {f2(m.methods[k].loyo_logrmse)}
-                </td>
+                <>
+                  <td class={k === m.model ? 'chosen' : ''}>{pct(m.methods[k].loyo_annual)}</td>
+                  <td class={k === m.model ? 'chosen' : ''}><b>{f2(m.methods[k].loyo_logrmse)}</b></td>
+                </>
               ))}
               <td><b>{m.model}</b></td>
               <td>{f2(m.b)}</td>
@@ -191,7 +215,6 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
       </table>
     </div>
     <p class="note">
-      Cells: annual error · monthly log-RMSE (0.10 ≈ ±10%, 0.43 ≈ a factor of 1.5, 1.1 ≈ a factor of 3).
       The log-log model has the lowest monthly error in every country, often by a factor of 2: the relation is not
       proportional (<i>b</i> &lt; 1), VIIRS gains relatively more in quiet months with small fires. For annual
       totals the month ratio (C) is close and slightly better in PT, GR, UA and CA; the calendar needs good months,
@@ -357,6 +380,25 @@ const repo = 'https://github.com/figielak/seamless-fire/blob/main/docs/validatio
   td.chosen {
     font-weight: 700;
     background: #eef3fb;
+  }
+  .cmp th.grp {
+    text-align: center;
+    border-left: 1px solid var(--line);
+  }
+  .cmp th.sub {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .why {
+    border-left: 4px solid var(--head);
+  }
+  .why-list {
+    margin: 0.3rem 0;
+    padding-left: 1.3rem;
+  }
+  .why-list li {
+    margin: 0.3rem 0;
   }
 </style>
 
