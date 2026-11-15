@@ -209,6 +209,8 @@ restart the state from start-up values (92-day spin-up error ~100 DC units). Cou
 Places to watch (`src/lib/watch.ts`, "Next 7 days" tab + numbered map markers): recurrence of 0.01° cells in the area for the
 forecast months (neighbour months half weight) × local weather factor (exp of the model's weather term at each forecast
 point, `forecast.json` `points`, IDW of the 3 nearest, log space); industrial cells out; places ≥ 3 km apart. A ranking, not a probability.
+Each place shows the nearest GeoNames town or village (≥ 1000 people) and region: `pipeline/places.py` (downloads into `data/geonames/`)
+→ `public/data/{CC}/places.json` (`src/lib/placenames.ts`).
 
 Use `import.meta.env.BASE_URL` for all data paths (GitHub Pages subpath).
 
